@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import {
   Bell,
   ChevronDown,
+  Database,
+  Download,
   Globe,
   Lock,
   LogOut,
@@ -20,15 +22,26 @@ interface NavbarProps {
   onOpenMobileMenu: () => void;
   unreadNotificationsCount?: number;
   onNavigateTab: (tabId: string) => void;
+  onDownloadZip?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuth,
   onOpenMobileMenu,
   unreadNotificationsCount = 2,
-  onNavigateTab
+  onNavigateTab,
+  onDownloadZip
 }) => {
-  const { currentUser, isAdmin, logout, activeViewRole, setActiveViewRole } = useAuth();
+  const {
+    currentUser,
+    isAdmin,
+    logout,
+    activeViewRole,
+    setActiveViewRole,
+    databaseEngine,
+    setDatabaseEngine,
+    isSupabaseReady
+  } = useAuth();
   const [showUserDropdown, setShowUserDropdown] = useState(false);
 
   return (
@@ -54,11 +67,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-base tracking-wider text-white group-hover:text-[#B66DFF] transition-colors">
-                  VORTEX
+                <span className="font-black text-base tracking-wider text-white group-hover:text-[#B66DFF] transition-colors">
+                  FINVANTA
                 </span>
-                <span className="font-semibold text-xs px-1.5 py-0.5 rounded-md bg-[#8B5CF6]/20 text-[#C4B5FD] border border-[#8B5CF6]/30">
-                  CAPITAL
+                <span className="font-semibold text-[10px] px-1.5 py-0.5 rounded-md bg-[#8B5CF6]/20 text-[#C4B5FD] border border-[#8B5CF6]/30 font-mono">
+                  PRO
                 </span>
               </div>
               <p className="text-[10px] text-slate-400 tracking-wider uppercase font-mono hidden sm:block">
@@ -68,8 +81,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Live Market Bar (Mid-screen ticker) */}
-        <div className="hidden xl:flex items-center gap-6 px-4 py-1.5 rounded-full bg-[#171225]/80 border border-[#8B5CF6]/15 text-xs text-slate-300 font-mono">
+        {/* Live Market Bar & Backend Status Indicator */}
+        <div className="hidden xl:flex items-center gap-5 px-4 py-1.5 rounded-full bg-[#171225]/80 border border-[#8B5CF6]/15 text-xs text-slate-300 font-mono">
           <div className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
             <span className="text-slate-400 text-[11px]">QUANT POOL:</span>
@@ -83,13 +96,29 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
           <div className="h-3 w-px bg-slate-700/60" />
           <div className="flex items-center gap-1.5">
-            <span className="text-slate-400 text-[11px]">AVG 30D APY:</span>
-            <span className="text-[#B66DFF] font-semibold">48.6%</span>
+            <Database className="w-3.5 h-3.5 text-[#B66DFF]" />
+            <span className="text-slate-400 text-[11px]">BACKEND:</span>
+            <span className="text-[#B66DFF] font-semibold">Firebase Live</span>
+            <span className="text-[10px] text-slate-500 font-sans">
+              (Supabase Schema Prepared)
+            </span>
           </div>
         </div>
 
         {/* Right Action Stack */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          {/* Download Project ZIP action */}
+          {onDownloadZip && (
+            <button
+              onClick={onDownloadZip}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#171225] border border-[#8B5CF6]/30 hover:border-[#8B5CF6]/70 text-[#C4B5FD] hover:text-white text-xs font-semibold transition-all shadow-sm active:scale-95"
+              title="Download Complete FINVANTA Project ZIP Archive"
+            >
+              <Download className="w-3.5 h-3.5 text-[#B66DFF]" />
+              <span>Project ZIP</span>
+            </button>
+          )}
+
           {/* Admin Switcher Toggle (if admin) */}
           {isAdmin && (
             <div className="flex items-center bg-[#171225] p-1 rounded-xl border border-[#8B5CF6]/30">
@@ -173,8 +202,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                       </span>
                     )}
                   </div>
-                  <div className="text-[10px] text-slate-400 truncate max-w-[120px]">
-                    {currentUser.email}
+                  <div className="text-[10px] text-slate-400 font-mono truncate max-w-[120px]">
+                    {currentUser.phoneNumber || currentUser.email}
                   </div>
                 </div>
 
@@ -202,8 +231,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                   />
                   <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-[#171225] border border-[#8B5CF6]/30 shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
                     <div className="p-3 border-b border-slate-800 text-xs">
-                      <div className="text-slate-400">Signed in as</div>
-                      <div className="font-semibold text-white truncate">{currentUser.email}</div>
+                      <div className="text-slate-400">Signed in with Phone</div>
+                      <div className="font-semibold text-white font-mono truncate">
+                        {currentUser.phoneNumber || currentUser.email}
+                      </div>
                       <div className="text-[10px] text-[#B66DFF] font-mono mt-0.5">
                         Tier: Apex Titanium
                       </div>

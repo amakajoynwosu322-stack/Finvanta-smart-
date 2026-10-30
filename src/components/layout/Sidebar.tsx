@@ -107,6 +107,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badge: pendingRequestsCount > 0 ? `${pendingRequestsCount} NEW` : undefined
     },
     { id: 'admin_referrals', label: 'Referral Management', icon: Award },
+    { id: 'admin_promos', label: 'Promo Codes & Perks', icon: Sparkles },
     { id: 'admin_announcements', label: 'Announcements', icon: Megaphone },
     { id: 'admin_tickets', label: 'Support Tickets', icon: LifeBuoy },
     { id: 'admin_config', label: 'Platform Configuration', icon: Settings },
@@ -126,7 +127,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#8B5CF6] to-[#6D28D9] flex items-center justify-center">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
-            <span className="font-bold text-white tracking-wide">VORTEX CAPITAL</span>
+            <span className="font-extrabold text-white tracking-wide">FINVANTA</span>
           </div>
           <button
             onClick={onCloseMobile}

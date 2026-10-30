@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Activity,
   AlertCircle,
   ArrowDownCircle,
   ArrowUpCircle,
   Award,
+  Calendar,
   CheckCircle,
+  Copy,
   CreditCard,
   Edit,
   History,
@@ -20,6 +22,9 @@ import {
   Shield,
   ShieldAlert,
   Sparkles,
+  Tag,
+  ToggleLeft,
+  ToggleRight,
   Trash2,
   TrendingUp,
   UserCheck,
@@ -34,6 +39,8 @@ import {
   DepositRequest,
   InvestmentPlan,
   PlatformConfig,
+  PromoCode,
+  PromoCodeUsage,
   Referral,
   SupportTicket,
   Transaction,
@@ -45,14 +52,19 @@ import {
   adminApproveDeposit,
   adminApproveWithdrawal,
   adminCreateAnnouncement,
+  adminCreatePromoCode,
   adminDeleteAnnouncement,
   adminDeleteInvestmentPlan,
+  adminDeletePromoCode,
   adminRejectDeposit,
   adminRejectWithdrawal,
   adminReplySupportTicket,
   adminSaveInvestmentPlan,
+  adminTogglePromoCodeStatus,
   adminToggleUserStatus,
-  adminUpdatePlatformConfig
+  adminUpdatePlatformConfig,
+  getPromoCodes,
+  getPromoCodeUsages
 } from '../../services/db';
 
 interface AdminDashboardProps {
@@ -111,17 +123,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [ticketNewStatus, setTicketNewStatus] = useState<SupportTicket['status']>('resolved');
 
   // Config Form State
-  const [platformName, setPlatformName] = useState(config?.platformName || 'Vortex Capital');
+  const [platformName, setPlatformName] = useState(config?.platformName || 'FINVANTA');
   const [minDeposit, setMinDeposit] = useState(config?.minDeposit || 50);
   const [minWithdrawal, setMinWithdrawal] = useState(config?.minWithdrawal || 25);
   const [feePct, setFeePct] = useState(config?.withdrawalFeePercentage || 1.5);
   const [refBonusPct, setRefBonusPct] = useState(config?.referralBonusPercentage || 7.0);
-  const [usdtAddress, setUsdtAddress] = useState(config?.usdtTrc20Address || 'TN7zK4qP89VortexCapitalTRC20Official94bX');
+  const [usdtAddress, setUsdtAddress] = useState(config?.usdtTrc20Address || 'TN7zK4qP89FinvantaTRC20Official94bX');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   // Search states
   const [userSearch, setUserSearch] = useState('');
   const [txSearch, setTxSearch] = useState('');
+
+  // Promo Codes State
+  const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
+  const [promoUsages, setPromoUsages] = useState<PromoCodeUsage[]>([]);
+  const [promoSearch, setPromoSearch] = useState<string>('');
+  const [isPromoLoading, setIsPromoLoading] = useState<boolean>(false);
+
+  // Promo Code Modal
+  const [showPromoModal, setShowPromoModal] = useState<boolean>(false);
+  const [promoCodeInput, setPromoCodeInput] = useState<string>('');
+  const [promoPerkType, setPromoPerkType] = useState<PromoCode['perkType']>('simulated_bonus');
+  const [promoBonusAmount, setPromoBonusAmount] = useState<number>(50);
+  const [promoMaxUses, setPromoMaxUses] = useState<number>(100);
+  const [promoExpiresAt, setPromoExpiresAt] = useState<string>('2026-12-31');
+  const [promoPerkDescription, setPromoPerkDescription] = useState<string>('VIP Institutional Sign-up Credit');
+  const [isCreatingPromo, setIsCreatingPromo] = useState<boolean>(false);
+
+  const fetchPromos = async () => {
+    try {
+      setIsPromoLoading(true);
+      const [codes, usages] = await Promise.all([
+        getPromoCodes(),
+        getPromoCodeUsages()
+      ]);
+      setPromoCodes(codes);
+      setPromoUsages(usages);
+    } catch (err: any) {
+      console.warn('Failed to load promo codes:', err);
+    } finally {
+      setIsPromoLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPromos();
+  }, [config]);
 
   const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ type, message });
@@ -299,6 +347,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  // 9. Promo Code Handlers
+  const handleCreatePromo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!promoCodeInput.trim()) return;
+    const cleanCode = promoCodeInput.trim().toUpperCase();
+    try {
+      setIsCreatingPromo(true);
+      await adminCreatePromoCode({
+        id: cleanCode,
+        code: cleanCode,
+        perkType: promoPerkType,
+        perkDescription: promoPerkDescription,
+        simulatedBonusAmount: Number(promoBonusAmount),
+        maxUses: Number(promoMaxUses),
+        expiresAt: promoExpiresAt,
+        active: true,
+        createdBy: 'Chief Administrative Officer'
+      });
+      showNotification(`Promo code ${cleanCode} created and active!`);
+      setShowPromoModal(false);
+      setPromoCodeInput('');
+      setPromoPerkDescription('VIP Institutional Sign-up Credit');
+      await fetchPromos();
+      onRefresh();
+    } catch (err: any) {
+      showNotification(err?.message || 'Failed to create promo code', 'error');
+    } finally {
+      setIsCreatingPromo(false);
+    }
+  };
+
+  const handleTogglePromo = async (id: string, currentStatus: boolean) => {
+    try {
+      await adminTogglePromoCodeStatus(id, !currentStatus);
+      showNotification(`Promo code is now ${!currentStatus ? 'ACTIVE' : 'PAUSED'}`);
+      await fetchPromos();
+      onRefresh();
+    } catch (err: any) {
+      showNotification(err?.message || 'Failed to toggle promo code', 'error');
+    }
+  };
+
+  const handleDeletePromo = async (id: string, code: string) => {
+    if (!confirm(`Are you sure you want to delete promo code "${code}"?`)) return;
+    try {
+      await adminDeletePromoCode(id);
+      showNotification(`Promo code "${code}" deleted.`);
+      await fetchPromos();
+      onRefresh();
+    } catch (err: any) {
+      showNotification(err?.message || 'Failed to delete promo code', 'error');
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* Toast */}
@@ -327,6 +429,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           { id: 'admin_transactions', label: 'Transaction Ledger', count: transactions.length },
           { id: 'admin_tickets', label: 'Support Tickets', count: tickets.filter(t => t.status === 'open').length },
           { id: 'admin_announcements', label: 'Announcements', count: announcements.length },
+          { id: 'admin_promos', label: 'Promo Codes & Perks', count: promoCodes.length },
           { id: 'admin_referrals', label: 'Referrals', count: referrals.length },
           { id: 'admin_config', label: 'Platform Config' },
         ].map((sub) => (
@@ -364,7 +467,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search user name or email..."
+                placeholder="Search user name, phone or email..."
                 value={userSearch}
                 onChange={(e) => setUserSearch(e.target.value)}
                 className="w-full bg-[#090711] border border-[#8B5CF6]/20 rounded-xl py-1.5 pl-9 pr-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#B66DFF]"
@@ -377,7 +480,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <table className="w-full text-left text-xs">
                 <thead className="bg-[#090711] border-b border-slate-800 text-slate-400 font-mono text-[10px] uppercase">
                   <tr>
-                    <th className="py-3 px-4">User</th>
+                    <th className="py-3 px-4">User & Phone</th>
                     <th className="py-3 px-4">Role</th>
                     <th className="py-3 px-4">Liquid Balance</th>
                     <th className="py-3 px-4">Active Locked</th>
@@ -388,12 +491,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {users
-                    .filter((u) => u.displayName?.toLowerCase().includes(userSearch.toLowerCase()) || u.email?.toLowerCase().includes(userSearch.toLowerCase()))
+                    .filter((u) =>
+                      u.displayName?.toLowerCase().includes(userSearch.toLowerCase()) ||
+                      u.phoneNumber?.toLowerCase().includes(userSearch.toLowerCase()) ||
+                      u.email?.toLowerCase().includes(userSearch.toLowerCase())
+                    )
                     .map((usr) => (
                       <tr key={usr.uid} className="hover:bg-[#8B5CF6]/5 transition-colors">
                         <td className="py-3 px-4">
                           <div className="font-semibold text-white">{usr.displayName}</div>
-                          <div className="text-[11px] text-slate-400 font-mono">{usr.email}</div>
+                          <div className="text-[11px] text-[#C4B5FD] font-mono">{usr.phoneNumber || usr.email}</div>
                         </td>
                         <td className="py-3 px-4">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-mono uppercase font-bold ${
@@ -939,6 +1046,284 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
+      {/* PANEL 9: PROMO CODES & VOUCHERS */}
+      {currentTab === 'admin_promos' && (
+        <div className="space-y-6">
+          {/* Header Card */}
+          <div className="glass-card rounded-3xl p-6 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-[#8B5CF6]/15 via-transparent to-transparent rounded-full blur-3xl pointer-events-none" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-8 h-8 rounded-xl bg-[#8B5CF6]/20 border border-[#8B5CF6]/40 flex items-center justify-center text-[#B66DFF]">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-base sm:text-lg font-bold text-white tracking-wide">
+                    Promo Codes & Institutional Vouchers
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Manage incentive campaigns, sign-up bonus credits, yield boosts, and trading fee waivers.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={fetchPromos}
+                  disabled={isPromoLoading}
+                  className="p-2.5 rounded-xl border border-slate-700 bg-[#090711] text-slate-300 hover:text-white transition-all flex items-center gap-1.5 text-xs font-semibold"
+                  title="Reload promo vouchers"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isPromoLoading ? 'animate-spin text-[#B66DFF]' : ''}`} />
+                  <span>Refresh</span>
+                </button>
+                <button
+                  onClick={() => setShowPromoModal(true)}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#B66DFF] to-[#8B5CF6] hover:from-[#c284ff] hover:to-[#9a6eff] text-slate-950 font-bold text-xs shadow-lg shadow-[#8B5CF6]/25 flex items-center gap-1.5 transition-all"
+                >
+                  <Plus className="w-4 h-4 text-slate-950 stroke-[2.5]" />
+                  <span>Create Promo Code</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
+              <div className="p-3.5 rounded-2xl bg-[#090711]/70 border border-slate-800/80">
+                <span className="text-[10px] text-slate-400 uppercase font-mono tracking-wider">Total Campaigns</span>
+                <div className="text-xl font-bold text-white mt-1 font-mono">{promoCodes.length}</div>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-[#090711]/70 border border-slate-800/80">
+                <span className="text-[10px] text-slate-400 uppercase font-mono tracking-wider">Active Codes</span>
+                <div className="text-xl font-bold text-emerald-400 mt-1 font-mono">
+                  {promoCodes.filter(c => c.active).length}
+                </div>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-[#090711]/70 border border-slate-800/80">
+                <span className="text-[10px] text-slate-400 uppercase font-mono tracking-wider">Total Redemptions</span>
+                <div className="text-xl font-bold text-[#B66DFF] mt-1 font-mono">
+                  {promoCodes.reduce((sum, c) => sum + (c.currentUses || 0), 0)}
+                </div>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-[#090711]/70 border border-slate-800/80">
+                <span className="text-[10px] text-slate-400 uppercase font-mono tracking-wider">Bonus Distributed</span>
+                <div className="text-xl font-bold text-emerald-400 mt-1 font-mono">
+                  ${promoCodes.reduce((sum, c) => sum + ((c.simulatedBonusAmount || 0) * (c.currentUses || 0)), 0).toLocaleString()}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Table Card */}
+          <div className="glass-card rounded-3xl p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+              <div>
+                <h4 className="text-sm font-bold text-white">Configured Promo Codes</h4>
+                <p className="text-xs text-slate-400">All registered promotion codes and active distribution rules</p>
+              </div>
+
+              {/* Search */}
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Filter by code name..."
+                  value={promoSearch}
+                  onChange={(e) => setPromoSearch(e.target.value)}
+                  className="w-full bg-[#090711] border border-slate-800 focus:border-[#8B5CF6]/50 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Promo Codes Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400 text-[11px] uppercase tracking-wider">
+                    <th className="pb-3 font-semibold pl-2">Promo Code</th>
+                    <th className="pb-3 font-semibold">Reward Type</th>
+                    <th className="pb-3 font-semibold">Value</th>
+                    <th className="pb-3 font-semibold">Usage Limit</th>
+                    <th className="pb-3 font-semibold">Expires</th>
+                    <th className="pb-3 font-semibold">Status</th>
+                    <th className="pb-3 font-semibold text-right pr-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {promoCodes
+                    .filter(c => !promoSearch || c.code.toLowerCase().includes(promoSearch.toLowerCase()) || c.perkDescription?.toLowerCase().includes(promoSearch.toLowerCase()))
+                    .map((item) => {
+                      const isExpired = new Date(item.expiresAt).getTime() < Date.now();
+                      const usagePercent = item.maxUses > 0 ? Math.min(100, Math.round((item.currentUses / item.maxUses) * 100)) : 0;
+                      return (
+                        <tr key={item.id} className="hover:bg-[#1f1833]/40 transition-colors">
+                          <td className="py-3.5 pl-2 font-mono font-bold">
+                            <div className="flex items-center gap-2">
+                              <span className="px-2.5 py-1 rounded-lg bg-[#8B5CF6]/20 border border-[#8B5CF6]/40 text-[#C4B5FD] text-xs">
+                                {item.code}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(item.code);
+                                  showNotification(`Code ${item.code} copied!`);
+                                }}
+                                className="text-slate-500 hover:text-white p-1 rounded"
+                                title="Copy code"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            {item.perkDescription && (
+                              <p className="text-[11px] text-slate-400 font-sans font-normal mt-0.5 max-w-xs truncate">
+                                {item.perkDescription}
+                              </p>
+                            )}
+                          </td>
+                          <td className="py-3.5">
+                            {item.perkType === 'simulated_bonus' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">
+                                <Wallet className="w-3 h-3" />
+                                <span>Simulated Credit</span>
+                              </span>
+                            )}
+                            {item.perkType === 'educational_vip' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-500/15 border border-purple-500/30 text-[#C4B5FD]">
+                                <TrendingUp className="w-3 h-3" />
+                                <span>VIP Scholar</span>
+                              </span>
+                            )}
+                            {item.perkType === 'referral_boost' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/15 border border-sky-500/30 text-sky-300">
+                                <Sparkles className="w-3 h-3" />
+                                <span>Referral Booster</span>
+                              </span>
+                            )}
+                            {item.perkType === 'course_unlock' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 border border-amber-500/30 text-amber-300">
+                                <Award className="w-3 h-3" />
+                                <span>Course Unlock</span>
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3.5 font-mono font-bold text-white">
+                            {item.simulatedBonusAmount ? `+$${item.simulatedBonusAmount.toFixed(2)}` : 'Tier Access'}
+                          </td>
+                          <td className="py-3.5">
+                            <div className="w-32">
+                              <div className="flex items-center justify-between text-[10px] font-mono mb-1">
+                                <span className="text-slate-300">{item.currentUses} used</span>
+                                <span className="text-slate-500">max {item.maxUses}</span>
+                              </div>
+                              <div className="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${usagePercent >= 100 ? 'bg-rose-500' : 'bg-gradient-to-r from-[#8B5CF6] to-[#B66DFF]'}`}
+                                  style={{ width: `${usagePercent}%` }}
+                                />
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3.5">
+                            <div className="text-[11px] font-mono text-slate-300">
+                              {new Date(item.expiresAt).toLocaleDateString()}
+                            </div>
+                            {isExpired && (
+                              <span className="inline-block mt-0.5 text-[9px] font-semibold text-rose-400">
+                                Expired
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3.5">
+                            <button
+                              onClick={() => handleTogglePromo(item.id, item.active)}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold flex items-center gap-1.5 transition-all ${
+                                item.active
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30'
+                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30'
+                              }`}
+                            >
+                              {item.active ? <ToggleRight className="w-3.5 h-3.5" /> : <ToggleLeft className="w-3.5 h-3.5" />}
+                              <span>{item.active ? 'Active' : 'Paused'}</span>
+                            </button>
+                          </td>
+                          <td className="py-3.5 pr-2 text-right">
+                            <button
+                              onClick={() => handleDeletePromo(item.id, item.code)}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                              title="Delete promo code"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  {promoCodes.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-slate-500">
+                        No promotional vouchers configured. Click "Create Promo Code" to add one.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Redemption Audit Log Card */}
+          <div className="glass-card rounded-3xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h4 className="text-sm font-bold text-white">Recent Voucher Redemptions</h4>
+                <p className="text-xs text-slate-400">Audit trail of users who claimed promotion credits</p>
+              </div>
+              <span className="text-[11px] font-mono text-[#B66DFF] bg-[#8B5CF6]/15 px-2.5 py-1 rounded-lg border border-[#8B5CF6]/30">
+                {promoUsages.length} Redemptions Logged
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400 text-[11px] uppercase tracking-wider">
+                    <th className="pb-3 font-semibold pl-2">Redeemed At</th>
+                    <th className="pb-3 font-semibold">User ID / Phone</th>
+                    <th className="pb-3 font-semibold">Voucher Code</th>
+                    <th className="pb-3 font-semibold text-right pr-2">Bonus Granted</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {promoUsages.slice(0, 15).map((usage) => (
+                    <tr key={usage.id} className="hover:bg-[#1f1833]/40 transition-colors">
+                      <td className="py-3 pl-2 text-slate-400 font-mono text-[11px]">
+                        {new Date(usage.usedAt).toLocaleString()}
+                      </td>
+                      <td className="py-3 font-mono text-slate-200">
+                        {usage.userId.length > 15 ? `${usage.userId.slice(0, 10)}...${usage.userId.slice(-4)}` : usage.userId}
+                      </td>
+                      <td className="py-3">
+                        <span className="px-2 py-0.5 rounded-md bg-[#8B5CF6]/20 text-[#C4B5FD] font-mono font-bold text-[11px] border border-[#8B5CF6]/40">
+                          {usage.code}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-2 text-right font-mono font-bold text-emerald-400">
+                        +${usage.rewardGiven.toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                  {promoUsages.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="py-6 text-center text-slate-500">
+                        No voucher redemptions logged yet. New users can redeem codes during registration.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL: Adjust User Balance */}
       {adjustTargetUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
@@ -1251,6 +1636,128 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   className="w-2/3 py-2 rounded-xl bg-[#8B5CF6] hover:bg-[#B66DFF] text-white font-bold"
                 >
                   Broadcast
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Create Promo Code */}
+      {showPromoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="relative w-full max-w-md bg-[#171225] border border-[#8B5CF6]/40 rounded-3xl p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-[#8B5CF6]/20 border border-[#8B5CF6]/40 flex items-center justify-center text-[#B66DFF]">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <h3 className="text-base font-bold text-white">Create Promo Voucher</h3>
+              </div>
+              <button
+                onClick={() => setShowPromoModal(false)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreatePromo} className="space-y-4 text-xs">
+              <div>
+                <label className="text-slate-300 font-medium block mb-1">Promo Code (Uppercase)</label>
+                <div className="relative">
+                  <Tag className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. VIP2026 or QUANTUM50"
+                    value={promoCodeInput}
+                    onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
+                    className="w-full bg-[#090711] border border-[#8B5CF6]/30 focus:border-[#8B5CF6] rounded-xl pl-9 pr-3 py-2.5 text-white font-mono uppercase tracking-wider font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-300 font-medium block mb-1">Perk Type</label>
+                  <select
+                    value={promoType}
+                    onChange={(e) => setPromoType(e.target.value as any)}
+                    className="w-full bg-[#090711] border border-[#8B5CF6]/30 rounded-xl p-2.5 text-white"
+                  >
+                    <option value="bonus_balance">Sign-up Balance ($)</option>
+                    <option value="yield_boost">Yield Boost (% ROI)</option>
+                    <option value="fee_discount">Fee Discount (% OFF)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-slate-300 font-medium block mb-1">
+                    {promoType === 'bonus_balance' ? 'Bonus Amount ($)' : 'Reward Rate (%)'}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="1"
+                    required
+                    value={promoRewardValue}
+                    onChange={(e) => setPromoRewardValue(Number(e.target.value))}
+                    className="w-full bg-[#090711] border border-[#8B5CF6]/30 rounded-xl p-2.5 text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-300 font-medium block mb-1">Max Redemptions</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={promoMaxUses}
+                    onChange={(e) => setPromoMaxUses(Number(e.target.value))}
+                    className="w-full bg-[#090711] border border-[#8B5CF6]/30 rounded-xl p-2.5 text-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-300 font-medium block mb-1">Expiration Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={promoExpiresAt}
+                    onChange={(e) => setPromoExpiresAt(e.target.value)}
+                    className="w-full bg-[#090711] border border-[#8B5CF6]/30 rounded-xl p-2.5 text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-slate-300 font-medium block mb-1">Campaign Description</label>
+                <textarea
+                  rows={2}
+                  value={promoDescription}
+                  onChange={(e) => setPromoDescription(e.target.value)}
+                  placeholder="e.g. Special institutional pilot allocation voucher"
+                  className="w-full bg-[#090711] border border-[#8B5CF6]/30 rounded-xl p-2.5 text-white resize-none"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPromoModal(false)}
+                  className="w-1/3 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingPromo}
+                  className="w-2/3 py-2.5 rounded-xl bg-gradient-to-r from-[#B66DFF] to-[#8B5CF6] hover:from-[#c284ff] hover:to-[#9a6eff] text-slate-950 font-bold shadow-lg"
+                >
+                  {isCreatingPromo ? 'Activating...' : 'Activate Promo Code'}
                 </button>
               </div>
             </form>

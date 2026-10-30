@@ -113,7 +113,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({ user, onRefresh }) => {
                   APEX TITANIUM
                 </span>
               </div>
-              <div className="text-xs text-slate-400 font-mono mt-0.5">{user.email}</div>
+              <div className="text-xs text-[#C4B5FD] font-mono mt-0.5">{user.phoneNumber || user.email}</div>
               <div className="flex items-center gap-2 mt-2 text-[11px]">
                 <span className="text-slate-500">UID: {user.uid.slice(0, 10)}...</span>
                 <span className="text-slate-600">•</span>
@@ -166,16 +166,42 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({ user, onRefresh }) => {
               />
             </div>
 
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-300 block mb-1.5 font-medium">First Name</label>
+                <input
+                  type="text"
+                  disabled
+                  value={user.firstName || user.displayName.split(' ')[0] || ''}
+                  className="w-full bg-[#090711]/60 border border-slate-800 rounded-xl py-2.5 px-3.5 text-xs text-slate-300 font-medium cursor-not-allowed"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-300 block mb-1.5 font-medium">Last Name</label>
+                <input
+                  type="text"
+                  disabled
+                  value={user.lastName || user.displayName.split(' ').slice(1).join(' ') || ''}
+                  className="w-full bg-[#090711]/60 border border-slate-800 rounded-xl py-2.5 px-3.5 text-xs text-slate-300 font-medium cursor-not-allowed"
+                />
+              </div>
+            </div>
+
             <div>
-              <label className="text-xs text-slate-300 block mb-1.5 font-medium">Primary Email Address</label>
-              <input
-                type="email"
-                disabled
-                value={user.email}
-                className="w-full bg-[#090711]/50 border border-slate-800 rounded-xl py-2.5 px-3.5 text-xs text-slate-500 font-mono cursor-not-allowed"
-              />
+              <label className="text-xs text-slate-300 block mb-1.5 font-medium">Primary Phone Number (Auth)</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  disabled
+                  value={user.phoneNumber || user.email || 'Unspecified'}
+                  className="w-full bg-[#090711]/60 border border-slate-800 rounded-xl py-2.5 px-3.5 text-xs text-white font-mono cursor-not-allowed"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  VERIFIED
+                </span>
+              </div>
               <span className="text-[10px] text-slate-500 mt-1 block">
-                Managed via Firebase Authentication provider.
+                Primary identifier for login and cryptographic OTP password recovery.
               </span>
             </div>
 

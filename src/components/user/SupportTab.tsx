@@ -64,7 +64,7 @@ export const SupportTab: React.FC<SupportTabProps> = ({ user, tickets, onRefresh
     },
     {
       q: 'Is my principal capital returned when the investment plan reaches maturity?',
-      a: 'Yes. All Vortex Capital quantum and arbitrage strategies feature 100% Principal Capital Return. Upon contract expiration, your original deposit unlocks automatically into your liquid available balance.'
+      a: 'Yes. All FINVANTA quantum and arbitrage strategies feature 100% Principal Capital Return. Upon contract expiration, your original deposit unlocks automatically into your liquid available balance.'
     },
     {
       q: 'How does the simulated deposit and withdrawal gateway work?',
@@ -187,13 +187,13 @@ export const SupportTab: React.FC<SupportTabProps> = ({ user, tickets, onRefresh
             <div className="space-y-3">
               <div className="p-3.5 rounded-2xl bg-[#090711]/70 border border-slate-800">
                 <div className="text-[10px] text-slate-400 uppercase font-mono">Institutional Email</div>
-                <div className="text-xs font-bold text-white font-mono mt-0.5">desk@vortex.capital</div>
+                <div className="text-xs font-bold text-white font-mono mt-0.5">desk@finvanta.com</div>
                 <div className="text-[10px] text-emerald-400 mt-1">Average Response: &lt; 15 mins</div>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-[#090711]/70 border border-slate-800">
                 <div className="text-[10px] text-slate-400 uppercase font-mono">Telegram VIP Channel</div>
-                <div className="text-xs font-bold text-white font-mono mt-0.5">@VortexCapitalApex</div>
+                <div className="text-xs font-bold text-white font-mono mt-0.5">@FinvantaOfficial</div>
                 <div className="text-[10px] text-slate-400 mt-1">24/7 automated alerts & announcements</div>
               </div>
 

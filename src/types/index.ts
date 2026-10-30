@@ -1,6 +1,10 @@
 export interface UserProfile {
   uid: string;
-  email: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber: string;
+  countryCode: string;
+  email?: string;
   displayName: string;
   photoURL?: string;
   role: 'user' | 'admin';
@@ -11,11 +15,62 @@ export interface UserProfile {
   totalDeposited: number;
   referralCode: string;
   referredBy?: string;
+  promoCode?: string;
+  educationalTier?: string; // e.g. "Standard", "VIP Educational Scholar", "Elite Quantitative"
   twoFactorEnabled: boolean;
   status: 'active' | 'suspended';
   kycStatus: 'unverified' | 'pending' | 'verified';
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PromoCode {
+  id: string; // The uppercase code string e.g. "QUANTUM2026"
+  code: string;
+  perkDescription: string;
+  perkType: 'educational_vip' | 'simulated_bonus' | 'referral_boost' | 'course_unlock';
+  simulatedBonusAmount?: number; // Simulated educational balance credit, clearly labeled simulation
+  maxUses: number;
+  currentUses: number;
+  expiresAt: string; // ISO date
+  active: boolean;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface PromoCodeUsage {
+  id: string;
+  code: string;
+  userId: string;
+  userPhone: string;
+  userName: string;
+  usedAt: string;
+  perkGranted: string;
+}
+
+export interface PhoneRegistrationData {
+  firstName: string;
+  lastName: string;
+  countryCode: string;
+  phoneNumber: string;
+  password: string;
+  referralCode?: string;
+  promoCode?: string;
+}
+
+export interface PhoneLoginData {
+  countryCode?: string;
+  phoneNumber: string;
+  password: string;
+}
+
+export interface PhoneResetRequest {
+  id: string;
+  phoneNumber: string;
+  otpCode: string;
+  expiresAt: string;
+  used: boolean;
+  createdAt: string;
 }
 
 export interface InvestmentPlan {

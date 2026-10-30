@@ -1,20 +1,31 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import React, { useState } from 'react';
 import {
+  Check,
   CheckCircle,
   Copy,
+  Eye,
+  EyeOff,
   Key,
+  KeyRound,
   Laptop,
   Lock,
-  LogOut,
+  Phone,
   QrCode,
+  RefreshCw,
   Shield,
   ShieldAlert,
-  Smartphone,
-  SmartphoneNfc
+  Smartphone
 } from 'lucide-react';
 import { UserProfile } from '../../types';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
+import { requestPhoneResetOtp, verifyPhoneResetOtpAndSetPassword } from '../../services/db';
+import { validatePasswordStrength } from '../../services/crypto';
 
 interface SecurityTabProps {
   user: UserProfile;
@@ -25,6 +36,18 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({ user, onRefresh }) => 
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(user.twoFactorEnabled ?? true);
   const [copiedKey, setCopiedKey] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Password reset via verified phone OTP
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [resetId, setResetId] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [loadingOtp, setLoadingOtp] = useState(false);
+  const [simulatedOtpNotice, setSimulatedOtpNotice] = useState<string | null>(null);
 
   const secret2fa = 'JBSWY3DPEHPK3PXP';
 
@@ -50,6 +73,60 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({ user, onRefresh }) => 
     setTimeout(() => setCopiedKey(false), 2000);
   };
 
+  // Step 1: Send OTP to user's registered phone
+  const handleSendOtp = async () => {
+    try {
+      setLoadingOtp(true);
+      setErrorMessage(null);
+      const res = await requestPhoneResetOtp(user.phoneNumber, user.countryCode || '+234');
+      setResetId(res.resetId);
+      setOtpSent(true);
+      setSimulatedOtpNotice(`Your OTP is ${res.otpCode} (Valid for 10 minutes)`);
+      setFeedback(`6-digit security code dispatched to ${user.phoneNumber}`);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to dispatch OTP code.');
+    } finally {
+      setLoadingOtp(false);
+    }
+  };
+
+  // Step 2: Confirm OTP and update password
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otpCode.trim() || otpCode.trim().length !== 6) {
+      setErrorMessage('Please enter the 6-digit OTP code.');
+      return;
+    }
+    const validation = validatePasswordStrength(newPassword);
+    if (!validation.isValid) {
+      setErrorMessage(validation.errors[0] || 'Password does not satisfy requirements.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setErrorMessage('Passwords do not match.');
+      return;
+    }
+
+    try {
+      setLoadingOtp(true);
+      setErrorMessage(null);
+      await verifyPhoneResetOtpAndSetPassword(resetId, otpCode.trim(), newPassword);
+      setFeedback('Password updated securely with PBKDF2 Web Crypto encryption.');
+      setShowPasswordChange(false);
+      setOtpSent(false);
+      setOtpCode('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setSimulatedOtpNotice(null);
+      setTimeout(() => setFeedback(null), 4000);
+      onRefresh();
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to update password.');
+    } finally {
+      setLoadingOtp(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* Header */}
@@ -59,7 +136,7 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({ user, onRefresh }) => 
           Account Security & Cryptographic Protection
         </h2>
         <p className="text-xs text-slate-400 mt-1">
-          Enforce hardware keys, TOTP authenticator protocols, and oversee active terminal sessions.
+          Enforce hardware keys, TOTP authenticator protocols, verified phone OTP password updates, and session telemetry.
         </p>
       </div>
 
@@ -69,6 +146,148 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({ user, onRefresh }) => 
           <span>{feedback}</span>
         </div>
       )}
+
+      {errorMessage && (
+        <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+          <ShieldAlert className="w-4 h-4 text-rose-400" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
+
+      {/* Password Management Card */}
+      <div className="glass-card rounded-3xl p-6 border-[#8B5CF6]/30">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#8B5CF6]/20 flex items-center justify-center text-[#B66DFF]">
+              <KeyRound className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white">Password Authentication (PBKDF2)</h3>
+              <p className="text-xs text-slate-400">
+                Encrypted via PBKDF2 SHA-256 (100k rounds) with unique salt. Secured to phone: {user.phoneNumber || 'Registered Device'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              setShowPasswordChange(!showPasswordChange);
+              setErrorMessage(null);
+            }}
+            className="px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md bg-[#8B5CF6]/20 hover:bg-[#8B5CF6]/30 text-[#C4B5FD] border border-[#8B5CF6]/40 self-start sm:self-auto"
+          >
+            {showPasswordChange ? 'Cancel' : 'Change Password via OTP'}
+          </button>
+        </div>
+
+        {showPasswordChange && (
+          <div className="mt-4 pt-4 border-t border-slate-800 animate-in fade-in duration-200">
+            {simulatedOtpNotice && (
+              <div className="mb-4 p-3 rounded-xl bg-[#8B5CF6]/15 border border-[#8B5CF6]/40 text-[#C4B5FD] text-xs flex items-center justify-between">
+                <span>{simulatedOtpNotice}</span>
+                <button
+                  onClick={() => {
+                    const match = simulatedOtpNotice.match(/\d{6}/);
+                    if (match) setOtpCode(match[0]);
+                  }}
+                  className="px-2 py-0.5 rounded bg-[#8B5CF6]/30 text-white text-[10px] font-mono hover:bg-[#8B5CF6]/50"
+                >
+                  Auto-fill
+                </button>
+              </div>
+            )}
+
+            {!otpSent ? (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-[#090711]/60 border border-slate-800">
+                <div>
+                  <div className="text-xs font-semibold text-white">
+                    Step 1: Verify Registered Phone Number
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Click the button to dispatch a 6-digit OTP to your verified number: <span className="text-[#C4B5FD] font-mono">{user.phoneNumber}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={handleSendOtp}
+                  disabled={loadingOtp}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#6D28D9] text-white text-xs font-bold hover:opacity-95 transition-all shadow-md disabled:opacity-50 flex items-center gap-2 shrink-0"
+                >
+                  {loadingOtp ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Phone className="w-3.5 h-3.5" />}
+                  <span>Send Phone OTP</span>
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleUpdatePassword} className="space-y-3.5 max-w-md">
+                <div>
+                  <label className="text-xs text-slate-300 font-medium block mb-1">
+                    6-Digit Verification OTP
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    placeholder="123456"
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                    className="w-full bg-[#090711] border border-[#8B5CF6]/30 rounded-xl py-2 px-3 text-sm text-center font-mono text-white tracking-widest focus:outline-none focus:border-[#B66DFF]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-300 font-medium block mb-1">New Password</label>
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      required
+                      placeholder="Min 8 chars, uppercase, number"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="w-full bg-[#090711] border border-[#8B5CF6]/30 rounded-xl py-2 pl-3 pr-10 text-xs text-white focus:outline-none focus:border-[#B66DFF]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                    >
+                      {showNewPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-300 font-medium block mb-1">Confirm New Password</label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Repeat new password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full bg-[#090711] border border-[#8B5CF6]/30 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-[#B66DFF]"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3 pt-1">
+                  <button
+                    type="submit"
+                    disabled={loadingOtp}
+                    className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 font-bold text-xs uppercase tracking-wider hover:opacity-95 transition-all shadow-md disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {loadingOtp ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    <span>Confirm & Update Password</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSendOtp}
+                    className="text-xs text-[#B66DFF] hover:underline"
+                  >
+                    Resend Code
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* 2FA Card */}
       <div className="glass-card rounded-3xl p-6 border-[#8B5CF6]/30">
@@ -80,7 +299,7 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({ user, onRefresh }) => 
             <div>
               <h3 className="text-base font-bold text-white">Two-Factor Authentication (TOTP)</h3>
               <p className="text-xs text-slate-400">
-                Mandates a 6-digit cryptographic TOTP passkey on every withdrawal or security alteration.
+                Mandates a 6-digit cryptographic TOTP passkey on every simulated withdrawal or security alteration.
               </p>
             </div>
           </div>
@@ -98,27 +317,22 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({ user, onRefresh }) => 
         </div>
 
         {twoFactorEnabled && (
-          <div className="p-5 rounded-2xl bg-[#090711]/70 border border-[#8B5CF6]/20 grid grid-cols-1 md:grid-cols-2 gap-5 items-center">
-            <div>
-              <span className="text-[10px] font-mono uppercase text-[#B66DFF] font-bold tracking-wider block mb-1">
-                Authenticator Secret Key
-              </span>
-              <p className="text-xs text-slate-300 mb-3">
-                Scan or enter this key in Google Authenticator, Authy, or 1Password.
-              </p>
-
-              <div className="flex items-center gap-2">
-                <div className="p-2.5 rounded-xl bg-[#171225] border border-slate-800 text-white font-mono text-xs font-bold tracking-widest flex-1">
-                  {secret2fa}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-800">
+            <div className="p-4 rounded-xl bg-[#090711]/60 border border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Key className="w-4 h-4 text-[#B66DFF]" />
+                <div>
+                  <div className="text-[10px] text-slate-400 font-mono uppercase">Authenticator Secret</div>
+                  <div className="text-xs font-mono font-bold text-white tracking-wider">{secret2fa}</div>
                 </div>
-                <button
-                  onClick={handleCopyKey}
-                  className="px-3 py-2.5 rounded-xl bg-[#8B5CF6]/20 hover:bg-[#8B5CF6]/40 border border-[#8B5CF6]/40 text-[#B66DFF] text-xs font-semibold flex items-center gap-1.5"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                  {copiedKey ? 'Copied' : 'Copy'}
-                </button>
               </div>
+              <button
+                onClick={handleCopyKey}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                title="Copy Secret"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </button>
             </div>
 
             <div className="p-4 rounded-xl bg-[#171225] border border-slate-800 flex items-center gap-4">
@@ -210,7 +424,7 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({ user, onRefresh }) => 
               <tr className="hover:bg-[#8B5CF6]/5 transition-colors">
                 <td className="py-3 px-3 text-white font-semibold">Session Token Generated</td>
                 <td className="py-3 px-3 text-slate-400">194.26.29.112</td>
-                <td className="py-3 px-3 text-[#B66DFF]">Firebase Auth (Google)</td>
+                <td className="py-3 px-3 text-[#B66DFF]">Phone & PBKDF2 Web Crypto</td>
                 <td className="py-3 px-3 text-emerald-400">0.0 (Zero Risk)</td>
                 <td className="py-3 px-3 text-slate-400">{new Date().toLocaleString()}</td>
               </tr>

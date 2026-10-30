@@ -23,10 +23,25 @@ import {
   SupportTicket,
   Transaction,
   UserProfile,
-  WithdrawalRequest
+  WithdrawalRequest,
+  PhoneRegistrationData,
+  PhoneLoginData,
+  PhoneResetRequest,
+  PromoCode,
+  PromoCodeUsage
 } from '../types';
+import {
+  normalizePhoneNumber,
+  sha256Hex,
+  hashPassword,
+  verifyPassword,
+  generateSecureOtp,
+  validatePasswordStrength
+} from './crypto';
 
 export const BOOTSTRAP_ADMIN_EMAIL = 'amakajoynwosu322@gmail.com';
+export const BOOTSTRAP_ADMIN_PHONE = '+2348000000001';
+export const BOOTSTRAP_ADMIN_UID = 'adm_finvanta_root_001';
 
 export const DEFAULT_PLANS: InvestmentPlan[] = [
   {
@@ -116,22 +131,34 @@ export const DEFAULT_PLANS: InvestmentPlan[] = [
 ];
 
 export const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
-  platformName: 'Vortex Capital',
+  platformName: 'FINVANTA',
   minDeposit: 50,
   minWithdrawal: 25,
   withdrawalFeePercentage: 1.5,
   referralBonusPercentage: 7.0,
   maintenanceMode: false,
   allowNewRegistrations: true,
-  usdtTrc20Address: 'TN7zK4qP89VortexCapitalTRC20Official94bX',
-  btcAddress: 'bc1q9vortexapexinvestments8492048hqf02k7z',
-  ethAddress: '0x8B5CF6d090711VortexCapitalMainnetVault92a',
+  usdtTrc20Address: 'TN7zK4qP89FinvantaTRC20Official94bX',
+  btcAddress: 'bc1q9finvantaapexinvestments8492048hqf02k7z',
+  ethAddress: '0x8B5CF6d090711FinvantaMainnetVault92a',
   updatedAt: new Date().toISOString()
 };
 
+// Sanitize profile to ensure no internal auth hashes or salts are ever exposed to the frontend
+export function sanitizeUserProfile(raw: any): UserProfile {
+  if (!raw) return raw;
+  const { _auth, ...safeProfile } = raw;
+  return safeProfile as UserProfile;
+}
+
 // Check if user is an admin
-export async function checkIsAdmin(uid: string, email?: string | null): Promise<boolean> {
-  if (email && email.toLowerCase() === BOOTSTRAP_ADMIN_EMAIL.toLowerCase()) {
+export async function checkIsAdmin(uid: string, identifier?: string | null): Promise<boolean> {
+  if (uid === BOOTSTRAP_ADMIN_UID) return true;
+  if (
+    identifier &&
+    (identifier.toLowerCase() === BOOTSTRAP_ADMIN_EMAIL.toLowerCase() ||
+      identifier === BOOTSTRAP_ADMIN_PHONE)
+  ) {
     return true;
   }
   try {
@@ -142,7 +169,7 @@ export async function checkIsAdmin(uid: string, email?: string | null): Promise<
   }
 }
 
-// Seed initial default plans and config if not present
+// Seed initial default plans, config and administrator account
 export async function seedInitialPlatformData() {
   try {
     const configRef = doc(db, 'platformConfig', 'settings');
@@ -162,13 +189,13 @@ export async function seedInitialPlatformData() {
       }
     }
 
-    // Also seed a welcome announcement if none exist
+    // Seed announcements
     const annSnap = await getDocs(collection(db, 'announcements'));
     if (annSnap.empty) {
       await setDoc(doc(db, 'announcements', 'ann_welcome'), {
         id: 'ann_welcome',
-        title: 'Vortex Capital v4.2 Quantum Engine Live',
-        content: 'Our latest neural arbitrage execution protocol is now active across Tier-1 liquidity bridges. Daily ROI payouts execute synchronously every 24 hours.',
+        title: 'FINVANTA v5.0 Quantum Engine Live',
+        content: 'Our latest neural arbitrage execution protocol is active across Tier-1 liquidity bridges. Daily ROI payouts execute synchronously every 24 hours.',
         category: 'yield_boost',
         priority: 'urgent',
         active: true,
@@ -186,89 +213,440 @@ export async function seedInitialPlatformData() {
         createdAt: new Date(Date.now() - 86400000).toISOString()
       });
     }
-  } catch (error) {
-    console.warn('Initial seeding note:', error);
-  }
-}
 
-// Sync or fetch User Profile
-export async function getOrCreateUserProfile(
-  uid: string,
-  email: string,
-  displayName?: string | null,
-  photoURL?: string | null,
-  referredBy?: string
-): Promise<UserProfile> {
-  const userRef = doc(db, 'users', uid);
-  try {
-    const userSnap = await getDoc(userRef);
-    if (userSnap.exists()) {
-      return userSnap.data() as UserProfile;
-    }
+    // Seed authoritative Administrator account if not registered
+    const adminPhoneHash = await sha256Hex(BOOTSTRAP_ADMIN_PHONE);
+    const adminRegSnap = await getDoc(doc(db, 'phoneRegistry', adminPhoneHash));
+    if (!adminRegSnap.exists()) {
+      const { hash, salt } = await hashPassword('AdminFINVANTA2026!');
+      const adminProfile: UserProfile = {
+        uid: BOOTSTRAP_ADMIN_UID,
+        firstName: 'Amaka',
+        lastName: 'Nwosu',
+        phoneNumber: BOOTSTRAP_ADMIN_PHONE,
+        countryCode: '+234',
+        email: BOOTSTRAP_ADMIN_EMAIL,
+        displayName: 'Amaka Nwosu (Platform Admin)',
+        photoURL: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=256',
+        role: 'admin',
+        balance: 0.0,
+        totalInvested: 0.0,
+        totalEarned: 0.0,
+        totalWithdrawn: 0.0,
+        totalDeposited: 0.0,
+        referralCode: 'FV-ROOTADMIN',
+        referredBy: '',
+        twoFactorEnabled: true,
+        status: 'active',
+        kycStatus: 'verified',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
 
-    const isAdm = email.toLowerCase() === BOOTSTRAP_ADMIN_EMAIL.toLowerCase();
-    const newProfile: UserProfile = {
-      uid,
-      email,
-      displayName: displayName || email.split('@')[0] || 'Investor',
-      photoURL: photoURL || '',
-      role: isAdm ? 'admin' : 'user',
-      balance: 1000.0, // Complimentary $1,000 simulated trial credit for all new accounts!
-      totalInvested: 0,
-      totalEarned: 0,
-      totalWithdrawn: 0,
-      totalDeposited: 1000.0,
-      referralCode: 'VX-' + uid.slice(0, 6).toUpperCase(),
-      referredBy: referredBy || '',
-      twoFactorEnabled: false,
-      status: 'active',
-      kycStatus: 'unverified',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+      await setDoc(doc(db, 'users', BOOTSTRAP_ADMIN_UID), {
+        ...adminProfile,
+        _auth: {
+          passwordHash: hash,
+          passwordSalt: salt
+        }
+      });
 
-    await setDoc(userRef, newProfile);
+      await setDoc(doc(db, 'phoneRegistry', adminPhoneHash), {
+        phoneHash: adminPhoneHash,
+        phoneNumber: BOOTSTRAP_ADMIN_PHONE,
+        uid: BOOTSTRAP_ADMIN_UID,
+        createdAt: new Date().toISOString()
+      });
 
-    // Initial complimentary transaction record
-    await setDoc(doc(db, 'transactions', `tx_welcome_${uid}`), {
-      id: `tx_welcome_${uid}`,
-      userId: uid,
-      userEmail: email,
-      userName: newProfile.displayName,
-      type: 'deposit',
-      amount: 1000.0,
-      currency: 'USDT',
-      status: 'completed',
-      reference: 'TX-SIM-WELCOME-BONUS',
-      note: 'Simulated Initial Welcome Credit (Demo Balance)',
-      paymentMethod: 'Vortex Quantum Faucet',
-      createdAt: new Date().toISOString()
-    });
-
-    // If admin, record in admins collection
-    if (isAdm) {
-      await setDoc(doc(db, 'admins', uid), {
-        email,
+      await setDoc(doc(db, 'admins', BOOTSTRAP_ADMIN_UID), {
+        email: BOOTSTRAP_ADMIN_EMAIL,
+        phone: BOOTSTRAP_ADMIN_PHONE,
         role: 'superadmin',
         addedAt: new Date().toISOString()
       });
     }
 
-    // Welcome notification
-    await setDoc(doc(db, 'notifications', `notif_welcome_${uid}`), {
-      id: `notif_welcome_${uid}`,
+    // Seed default educational promo codes
+    const defaultPromos: PromoCode[] = [
+      {
+        id: 'QUANTUM2026',
+        code: 'QUANTUM2026',
+        perkDescription: 'VIP Educational Scholar Tier & Priority Quantitative Execution Simulation',
+        perkType: 'educational_vip',
+        simulatedBonusAmount: 250,
+        maxUses: 1000,
+        currentUses: 0,
+        expiresAt: '2027-12-31T23:59:59Z',
+        active: true,
+        createdBy: 'Platform Governance Desk',
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'VIPACCESS',
+        code: 'VIPACCESS',
+        perkDescription: 'Elite VIP Learning Module & Enhanced 10% Simulated Referral Multiplier',
+        perkType: 'referral_boost',
+        simulatedBonusAmount: 100,
+        maxUses: 500,
+        currentUses: 0,
+        expiresAt: '2027-12-31T23:59:59Z',
+        active: true,
+        createdBy: 'Platform Governance Desk',
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'LEARNCRYPTO',
+        code: 'LEARNCRYPTO',
+        perkDescription: '$500 Educational Sandbox Credit for Risk-Free Arbitrage Testing',
+        perkType: 'simulated_bonus',
+        simulatedBonusAmount: 500,
+        maxUses: 2500,
+        currentUses: 0,
+        expiresAt: '2027-12-31T23:59:59Z',
+        active: true,
+        createdBy: 'Platform Governance Desk',
+        createdAt: new Date().toISOString()
+      }
+    ];
+
+    for (const promo of defaultPromos) {
+      const pRef = doc(db, 'promoCodes', promo.id);
+      const pSnap = await getDoc(pRef);
+      if (!pSnap.exists()) {
+        await setDoc(pRef, promo);
+      }
+    }
+  } catch (error) {
+    console.warn('Initial seeding note:', error);
+  }
+}
+
+// Fetch user profile by UID
+export async function getUserProfile(uid: string): Promise<UserProfile | null> {
+  try {
+    const userRef = doc(db, 'users', uid);
+    const snap = await getDoc(userRef);
+    if (snap.exists()) {
+      return sanitizeUserProfile(snap.data());
+    }
+    return null;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, `users/${uid}`);
+    return null;
+  }
+}
+
+// Register user with phone number and password
+export async function registerUserWithPhone(data: PhoneRegistrationData): Promise<UserProfile> {
+  const validation = validatePasswordStrength(data.password);
+  if (!validation.isValid) {
+    throw new Error(validation.errors[0] || 'Password does not satisfy security requirements.');
+  }
+
+  const cleanCountryCode = data.countryCode.trim() || '+234';
+  const normalizedPhone = normalizePhoneNumber(cleanCountryCode, data.phoneNumber);
+  if (normalizedPhone.length < 9) {
+    throw new Error('Please enter a valid phone number with country code.');
+  }
+
+  const phoneHash = await sha256Hex(normalizedPhone);
+  const regRef = doc(db, 'phoneRegistry', phoneHash);
+  const existingReg = await getDoc(regRef);
+
+  if (existingReg.exists()) {
+    throw new Error('A user account with this phone number is already registered. Please log in.');
+  }
+
+  // Hash password using PBKDF2 Web Crypto API (100,000 iterations + 16-byte random salt)
+  const { hash, salt } = await hashPassword(data.password);
+  const uid = 'usr_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 8);
+
+  const cleanFirstName = data.firstName.trim();
+  const cleanLastName = data.lastName.trim();
+
+  const newProfile: UserProfile = {
+    uid,
+    firstName: cleanFirstName,
+    lastName: cleanLastName,
+    phoneNumber: normalizedPhone,
+    countryCode: cleanCountryCode,
+    displayName: `${cleanFirstName} ${cleanLastName}`,
+    email: `${normalizedPhone.replace('+', '')}@sim.finvanta.com`,
+    photoURL: `https://api.dicebear.com/7.x/identicon/svg?seed=${uid}`,
+    role: 'user',
+    balance: 0.0, // Strictly $0.00 initial balance in production
+    totalInvested: 0.0,
+    totalEarned: 0.0,
+    totalWithdrawn: 0.0,
+    totalDeposited: 0.0,
+    referralCode: 'FV-' + uid.slice(-6).toUpperCase(),
+    referredBy: data.referralCode?.trim() || '',
+    twoFactorEnabled: false,
+    status: 'active',
+    kycStatus: 'unverified',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  // Process optional promo code through backend validation
+  let promoPerkGranted: string | null = null;
+  if (data.promoCode?.trim()) {
+    const promoCheck = await validatePromoCode(data.promoCode.trim());
+    if (!promoCheck.valid || !promoCheck.promoCode) {
+      throw new Error(promoCheck.message || 'The specified promo code is invalid or expired.');
+    }
+
+    const promo = promoCheck.promoCode;
+    newProfile.promoCode = promo.code;
+    newProfile.educationalTier =
+      promo.perkType === 'educational_vip'
+        ? 'VIP Educational Scholar'
+        : promo.perkType === 'referral_boost'
+        ? 'VIP Referral Partner'
+        : 'Standard Scholar';
+
+    // If educational sandbox credit is offered
+    if (promo.simulatedBonusAmount && promo.simulatedBonusAmount > 0) {
+      newProfile.balance = promo.simulatedBonusAmount;
+      newProfile.totalDeposited = promo.simulatedBonusAmount;
+    }
+
+    promoPerkGranted = promo.perkDescription;
+
+    // Record usage in audit log
+    const usageId = `use_${Date.now()}_${uid.slice(-4)}`;
+    const usageRecord: PromoCodeUsage = {
+      id: usageId,
+      code: promo.code,
       userId: uid,
-      title: 'Welcome to Vortex Capital Protocol',
-      message: 'Your institutional investment account is ready with $1,000 simulated credit. Explore our automated AI & Quantum Yield packages.',
-      type: 'system',
+      userPhone: normalizedPhone,
+      userName: newProfile.displayName,
+      usedAt: new Date().toISOString(),
+      perkGranted: promo.perkDescription
+    };
+
+    try {
+      await setDoc(doc(db, 'promoCodeUsages', usageId), usageRecord);
+      await updateDoc(doc(db, 'promoCodes', promo.id), {
+        currentUses: (promo.currentUses || 0) + 1
+      });
+    } catch (promoErr) {
+      console.warn('Promo usage record note:', promoErr);
+    }
+  }
+
+  // Save phone registry entry
+  await setDoc(regRef, {
+    phoneHash,
+    phoneNumber: normalizedPhone,
+    uid,
+    createdAt: new Date().toISOString()
+  });
+
+  // Save user document with encrypted credentials
+  await setDoc(doc(db, 'users', uid), {
+    ...newProfile,
+    _auth: {
+      passwordHash: hash,
+      passwordSalt: salt
+    }
+  });
+
+  // Handle referral linking if provided
+  if (data.referralCode?.trim()) {
+    try {
+      const refCode = data.referralCode.trim().toUpperCase();
+      const q = query(collection(db, 'users'), where('referralCode', '==', refCode));
+      const qSnap = await getDocs(q);
+      if (!qSnap.empty) {
+        const referrerDoc = qSnap.docs[0];
+        const referrer = referrerDoc.data() as UserProfile;
+        const refId = `ref_${Date.now()}_${uid.slice(-4)}`;
+        await setDoc(doc(db, 'referrals', refId), {
+          id: refId,
+          referrerId: referrer.uid,
+          referredUserId: uid,
+          referredUserEmail: newProfile.phoneNumber,
+          referredUserName: newProfile.displayName,
+          commissionEarned: 0.0,
+          status: 'active',
+          level: 1,
+          createdAt: new Date().toISOString()
+        } as Referral);
+      }
+    } catch (refErr) {
+      console.warn('Referral linking note:', refErr);
+    }
+  }
+
+  // Welcome notification
+  await setDoc(doc(db, 'notifications', `notif_welcome_${uid}`), {
+    id: `notif_welcome_${uid}`,
+    userId: uid,
+    title: 'Welcome to FINVANTA Protocol',
+    message: 'Your account has been registered with phone authentication. To explore our quantum arbitrage strategies in simulation mode, head to the Deposit tab to initiate a simulated balance.',
+    type: 'system',
+    read: false,
+    createdAt: new Date().toISOString()
+  });
+
+  // Promo code notification if applied
+  if (promoPerkGranted && data.promoCode) {
+    await setDoc(doc(db, 'notifications', `notif_promo_${uid}`), {
+      id: `notif_promo_${uid}`,
+      userId: uid,
+      title: `Promo Perk Unlocked (${data.promoCode.trim().toUpperCase()})`,
+      message: `Congratulations! ${promoPerkGranted} has been activated on your educational account.`,
+      type: 'promo',
       read: false,
       createdAt: new Date().toISOString()
     });
-
-    return newProfile;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.GET, `users/${uid}`);
   }
+
+  return newProfile;
+}
+
+// Log in user with phone number and password
+export async function loginUserWithPhone(
+  phoneNumber: string,
+  password: string,
+  countryCode = '+234'
+): Promise<UserProfile> {
+  const normalizedPhone = normalizePhoneNumber(countryCode, phoneNumber);
+  const phoneHash = await sha256Hex(normalizedPhone);
+
+  const regRef = doc(db, 'phoneRegistry', phoneHash);
+  const regSnap = await getDoc(regRef);
+
+  if (!regSnap.exists()) {
+    throw new Error(`No FINVANTA account found with phone number ${normalizedPhone}. Please check your number or register.`);
+  }
+
+  const { uid } = regSnap.data();
+  const userRef = doc(db, 'users', uid);
+  const userSnap = await getDoc(userRef);
+
+  if (!userSnap.exists()) {
+    throw new Error('Account record could not be found.');
+  }
+
+  const userData = userSnap.data();
+  if (userData.status === 'suspended') {
+    throw new Error('This account has been suspended. Please contact platform compliance support.');
+  }
+
+  const authData = userData._auth;
+  if (!authData || !authData.passwordHash || !authData.passwordSalt) {
+    throw new Error('This account does not have password credentials configured.');
+  }
+
+  const isPasswordValid = await verifyPassword(password, authData.passwordHash, authData.passwordSalt);
+  if (!isPasswordValid) {
+    throw new Error('Incorrect password. Please verify your credentials or reset your password.');
+  }
+
+  return sanitizeUserProfile(userData);
+}
+
+// Request password reset OTP via phone number
+export async function requestPhoneResetOtp(
+  phoneNumber: string,
+  countryCode = '+234'
+): Promise<{ resetId: string; otpCode: string; phoneNumber: string }> {
+  const normalizedPhone = normalizePhoneNumber(countryCode, phoneNumber);
+  const phoneHash = await sha256Hex(normalizedPhone);
+
+  const regRef = doc(db, 'phoneRegistry', phoneHash);
+  const regSnap = await getDoc(regRef);
+
+  if (!regSnap.exists()) {
+    throw new Error(`No FINVANTA account found with phone number ${normalizedPhone}`);
+  }
+
+  const otpCode = generateSecureOtp();
+  const resetId = `rst_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
+  const resetDoc: PhoneResetRequest = {
+    id: resetId,
+    phoneNumber: normalizedPhone,
+    otpCode,
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10 minutes
+    used: false,
+    createdAt: new Date().toISOString()
+  };
+
+  await setDoc(doc(db, 'passwordResets', resetId), resetDoc);
+
+  return { resetId, otpCode, phoneNumber: normalizedPhone };
+}
+
+// Verify OTP and update password
+export async function verifyPhoneResetOtpAndSetPassword(
+  resetId: string,
+  otpCode: string,
+  newPassword: string
+): Promise<{ success: boolean; message: string }> {
+  const validation = validatePasswordStrength(newPassword);
+  if (!validation.isValid) {
+    throw new Error(validation.errors[0] || 'Password does not meet complexity requirements.');
+  }
+
+  const resetRef = doc(db, 'passwordResets', resetId);
+  const resetSnap = await getDoc(resetRef);
+
+  if (!resetSnap.exists()) {
+    throw new Error('Invalid or expired reset request. Please initiate a new password reset.');
+  }
+
+  const resetData = resetSnap.data() as PhoneResetRequest;
+
+  if (resetData.used) {
+    throw new Error('This reset code has already been used. Please request a new one.');
+  }
+
+  if (new Date(resetData.expiresAt).getTime() < Date.now()) {
+    throw new Error('The reset code has expired. Please request a new code.');
+  }
+
+  if (resetData.otpCode.trim() !== otpCode.trim()) {
+    throw new Error('Invalid OTP code. Please enter the 6-digit code received.');
+  }
+
+  const phoneHash = await sha256Hex(resetData.phoneNumber);
+  const regSnap = await getDoc(doc(db, 'phoneRegistry', phoneHash));
+  if (!regSnap.exists()) {
+    throw new Error('Associated account could not be located.');
+  }
+
+  const { uid } = regSnap.data();
+  const { hash, salt } = await hashPassword(newPassword);
+
+  // Update password in user doc
+  await updateDoc(doc(db, 'users', uid), {
+    _auth: {
+      passwordHash: hash,
+      passwordSalt: salt
+    },
+    updatedAt: new Date().toISOString()
+  });
+
+  // Mark reset code as used
+  await updateDoc(resetRef, {
+    used: true
+  });
+
+  // Create notification
+  await setDoc(doc(db, 'notifications', `notif_pwd_${Date.now()}`), {
+    id: `notif_pwd_${Date.now()}`,
+    userId: uid,
+    title: 'Security Alert: Password Updated',
+    message: 'Your FINVANTA account password was successfully reset via verified phone OTP.',
+    type: 'security',
+    read: false,
+    createdAt: new Date().toISOString()
+  });
+
+  return { success: true, message: 'Password has been successfully updated. You can now log in.' };
 }
 
 // Subscribe to a user profile
@@ -278,7 +656,7 @@ export function subscribeToUserProfile(uid: string, callback: (user: UserProfile
     userRef,
     (snap) => {
       if (snap.exists()) {
-        callback(snap.data() as UserProfile);
+        callback(sanitizeUserProfile(snap.data()));
       } else {
         callback(null);
       }
@@ -313,7 +691,7 @@ export async function executeInvestment(
   const newInvestment: Investment = {
     id: investmentId,
     userId: user.uid,
-    userEmail: user.email,
+    userEmail: user.email || user.phoneNumber || '',
     userName: user.displayName,
     planId: plan.id,
     planName: plan.name,
@@ -333,7 +711,7 @@ export async function executeInvestment(
   const newTransaction: Transaction = {
     id: transactionId,
     userId: user.uid,
-    userEmail: user.email,
+    userEmail: user.email || user.phoneNumber || '',
     userName: user.displayName,
     type: 'investment',
     amount,
@@ -480,7 +858,7 @@ export async function submitDepositRequest(
   const depositReq: DepositRequest = {
     id: requestId,
     userId: user.uid,
-    userEmail: user.email,
+    userEmail: user.email || user.phoneNumber || '',
     userName: user.displayName,
     amount,
     currency,
@@ -495,7 +873,7 @@ export async function submitDepositRequest(
   const newTx: Transaction = {
     id: transactionId,
     userId: user.uid,
-    userEmail: user.email,
+    userEmail: user.email || user.phoneNumber || '',
     userName: user.displayName,
     type: 'deposit',
     amount,
@@ -552,7 +930,7 @@ export async function submitWithdrawalRequest(
   const withdrawalReq: WithdrawalRequest = {
     id: requestId,
     userId: user.uid,
-    userEmail: user.email,
+    userEmail: user.email || user.phoneNumber || '',
     userName: user.displayName,
     amount,
     currency,
@@ -567,7 +945,7 @@ export async function submitWithdrawalRequest(
   const newTx: Transaction = {
     id: transactionId,
     userId: user.uid,
-    userEmail: user.email,
+    userEmail: user.email || user.phoneNumber || '',
     userName: user.displayName,
     type: 'withdrawal',
     amount,
@@ -627,7 +1005,7 @@ export async function createSupportTicket(
   const ticket: SupportTicket = {
     id: ticketId,
     userId: user.uid,
-    userEmail: user.email,
+    userEmail: user.email || user.phoneNumber || '',
     userName: user.displayName,
     subject,
     category,
@@ -987,5 +1365,135 @@ export async function adminUpdatePlatformConfig(config: PlatformConfig): Promise
     });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, 'platformConfig/settings');
+  }
+}
+
+// ----------------- PROMO CODE SYSTEM -----------------
+
+// Validate a promo code through the backend
+export async function validatePromoCode(rawCode: string): Promise<{
+  valid: boolean;
+  promoCode?: PromoCode;
+  message: string;
+}> {
+  if (!rawCode || !rawCode.trim()) {
+    return { valid: false, message: 'Please enter a promo code.' };
+  }
+
+  const code = rawCode.trim().toUpperCase();
+
+  try {
+    const promoRef = doc(db, 'promoCodes', code);
+    const snap = await getDoc(promoRef);
+
+    if (!snap.exists()) {
+      return {
+        valid: false,
+        message: `Promo code "${code}" is invalid. Please verify spelling or leave the field blank.`
+      };
+    }
+
+    const promo = snap.data() as PromoCode;
+
+    if (!promo.active) {
+      return {
+        valid: false,
+        message: `Promo code "${code}" is currently disabled.`
+      };
+    }
+
+    if (promo.expiresAt && new Date(promo.expiresAt).getTime() < Date.now()) {
+      return {
+        valid: false,
+        message: `Promo code "${code}" expired on ${new Date(promo.expiresAt).toLocaleDateString()}.`
+      };
+    }
+
+    if (promo.maxUses > 0 && promo.currentUses >= promo.maxUses) {
+      return {
+        valid: false,
+        message: `Promo code "${code}" has reached its maximum allowable uses (${promo.maxUses}).`
+      };
+    }
+
+    return {
+      valid: true,
+      promoCode: promo,
+      message: `Verified! Grants: ${promo.perkDescription}`
+    };
+  } catch (err: any) {
+    return {
+      valid: false,
+      message: err?.message || 'Error communicating with central validation service.'
+    };
+  }
+}
+
+// Admin: Get all promo codes
+export async function getPromoCodes(): Promise<PromoCode[]> {
+  try {
+    const snap = await getDocs(collection(db, 'promoCodes'));
+    return snap.docs.map((d) => d.data() as PromoCode);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, 'promoCodes');
+    return [];
+  }
+}
+
+// Admin: Create or update promo code
+export async function adminCreatePromoCode(
+  data: Omit<PromoCode, 'currentUses' | 'createdAt'>
+): Promise<void> {
+  const code = data.code.trim().toUpperCase();
+  const promoRef = doc(db, 'promoCodes', code);
+  const now = new Date().toISOString();
+
+  const newPromo: PromoCode = {
+    ...data,
+    id: code,
+    code,
+    currentUses: 0,
+    createdAt: now
+  };
+
+  try {
+    await setDoc(promoRef, newPromo, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `promoCodes/${code}`);
+  }
+}
+
+// Admin: Toggle promo code active status
+export async function adminTogglePromoCodeStatus(code: string, active: boolean): Promise<void> {
+  const cleanCode = code.trim().toUpperCase();
+  try {
+    await updateDoc(doc(db, 'promoCodes', cleanCode), {
+      active
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `promoCodes/${cleanCode}`);
+  }
+}
+
+// Admin: Delete promo code
+export async function adminDeletePromoCode(code: string): Promise<void> {
+  const cleanCode = code.trim().toUpperCase();
+  try {
+    await deleteDoc(doc(db, 'promoCodes', cleanCode));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `promoCodes/${cleanCode}`);
+  }
+}
+
+// Admin: Get promo code usage history
+export async function getPromoCodeUsages(): Promise<PromoCodeUsage[]> {
+  try {
+    const snap = await getDocs(collection(db, 'promoCodeUsages'));
+    return snap.docs
+      .map((d) => d.data() as PromoCodeUsage)
+      .sort((a, b) => new Date(b.usedAt).getTime() - new Date(a.usedAt).getTime());
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, 'promoCodeUsages');
+    return [];
   }
 }

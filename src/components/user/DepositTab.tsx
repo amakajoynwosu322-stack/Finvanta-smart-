@@ -38,7 +38,7 @@ export const DepositTab: React.FC<DepositTabProps> = ({
     USDT_TRC20: {
       currency: 'USDT',
       network: 'TRC-20',
-      address: config?.usdtTrc20Address || 'TN7zK4qP89VortexCapitalTRC20Official94bX',
+      address: config?.usdtTrc20Address || 'TN7zK4qP89FinvantaTRC20Official94bX',
       min: config?.minDeposit || 50,
       fee: '0.00 USDT (Simulated)',
       confirmations: '1 network block',
@@ -46,7 +46,7 @@ export const DepositTab: React.FC<DepositTabProps> = ({
     USDT_ERC20: {
       currency: 'USDT',
       network: 'ERC-20',
-      address: '0x71C5d92e8B5CF6d090711VortexCapitalUSDT92a',
+      address: '0x71C5d92e8B5CF6d090711FinvantaUSDT92a',
       min: 100,
       fee: '0.00 USDT (Simulated)',
       confirmations: '6 network blocks',
@@ -54,7 +54,7 @@ export const DepositTab: React.FC<DepositTabProps> = ({
     BTC: {
       currency: 'BTC',
       network: 'Bitcoin Native SegWit',
-      address: config?.btcAddress || 'bc1q9vortexapexinvestments8492048hqf02k7z',
+      address: config?.btcAddress || 'bc1q9finvantaapexinvestments8492048hqf02k7z',
       min: 100,
       fee: '0.0001 BTC (Simulated)',
       confirmations: '2 network blocks',
@@ -62,7 +62,7 @@ export const DepositTab: React.FC<DepositTabProps> = ({
     ETH: {
       currency: 'ETH',
       network: 'Ethereum Mainnet',
-      address: config?.ethAddress || '0x8B5CF6d090711VortexCapitalMainnetVault92a',
+      address: config?.ethAddress || '0x8B5CF6d090711FinvantaMainnetVault92a',
       min: 100,
       fee: '0.001 ETH (Simulated)',
       confirmations: '12 network blocks',
@@ -115,7 +115,7 @@ export const DepositTab: React.FC<DepositTabProps> = ({
         <ShieldAlert className="w-5 h-5 shrink-0 text-amber-400 mt-0.5" />
         <div>
           <span className="font-bold text-white block">DEMO & SIMULATION GATEWAY ONLY</span>
-          This is an interactive simulation sandbox for evaluating Vortex Capital. Do NOT send real cryptocurrency or fiat. Submitting a simulated deposit generates a test transaction queued for administrative approval or immediate sandbox balance credit.
+          This is an interactive simulation sandbox for evaluating FINVANTA. Do NOT send real cryptocurrency or fiat. Submitting a simulated deposit generates a test transaction queued for administrative approval or immediate sandbox balance credit.
         </div>
       </div>
 

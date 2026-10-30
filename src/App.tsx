@@ -17,6 +17,7 @@ import { Navbar } from './components/layout/Navbar';
 import { Sidebar } from './components/layout/Sidebar';
 import { SimulatedBanner } from './components/common/SimulatedBanner';
 import { AuthModal } from './components/auth/AuthModal';
+import { AuthWelcomeScreen } from './components/auth/AuthWelcomeScreen';
 
 import { OverviewTab } from './components/user/OverviewTab';
 import { PortfolioTab } from './components/user/PortfolioTab';
@@ -53,12 +54,13 @@ import {
   Layers,
   LayoutDashboard,
   PieChart,
+  Sparkles,
   TrendingUp,
   Wallet
 } from 'lucide-react';
 
 const MainApp: React.FC = () => {
-  const { currentUser, isAdmin, activeViewRole, setActiveViewRole } = useAuth();
+  const { currentUser, isAdmin, activeViewRole, setActiveViewRole, loading } = useAuth();
 
   const [currentTab, setCurrentTab] = useState<string>('overview');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
@@ -216,23 +218,41 @@ const MainApp: React.FC = () => {
     };
   }, [currentUser, isAdmin, activeViewRole, refreshTrigger]);
 
-  // Default fallback user if not yet logged in so evaluator can immediately see interactive UI
-  const effectiveUser: UserProfile = currentUser || {
-    uid: 'guest_visitor',
-    email: 'guest@vortex.capital',
-    displayName: 'Guest Investor',
-    role: 'user',
-    balance: 5000.0,
-    totalInvested: 10000.0,
-    totalEarned: 1450.0,
-    totalWithdrawn: 1200.0,
-    totalDeposited: 15000.0,
-    referralCode: 'VX-GUEST',
-    twoFactorEnabled: false,
-    status: 'active',
-    kycStatus: 'verified',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+  // Authentication gate: Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#090711] flex flex-col items-center justify-center text-white selection:bg-[#8B5CF6]/30">
+        <div className="relative flex flex-col items-center">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#8B5CF6] to-[#B66DFF] flex items-center justify-center shadow-xl shadow-[#8B5CF6]/30 animate-pulse mb-4">
+            <Sparkles className="w-8 h-8 text-slate-950" />
+          </div>
+          <h2 className="text-xl font-bold tracking-wider text-white">FINVANTA</h2>
+          <p className="text-xs text-slate-400 mt-1 font-mono">Initializing Encrypted Connection...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Authentication gate: First screen is Welcome / Auth
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-[#090711] text-white flex flex-col font-sans selection:bg-[#8B5CF6]/30 bg-mesh">
+        <SimulatedBanner />
+        <AuthWelcomeScreen />
+      </div>
+    );
+  }
+
+  // Authenticated user profile
+  const effectiveUser: UserProfile = currentUser;
+
+  const handleDownloadZip = () => {
+    const link = document.createElement('a');
+    link.href = '/finvanta-project.zip';
+    link.download = 'finvanta-project.zip';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const pendingRequestsCount =
@@ -251,6 +271,7 @@ const MainApp: React.FC = () => {
         onOpenAuth={() => setIsAuthModalOpen(true)}
         onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
         unreadNotificationsCount={unreadCount}
+        onDownloadZip={handleDownloadZip}
         onNavigateTab={(tab) => {
           if (tab.startsWith('admin_')) {
             setActiveViewRole('admin');

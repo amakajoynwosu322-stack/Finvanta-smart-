@@ -1,207 +1,216 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { isSupabaseConfigured, supabase } from '../supabase/client';
+import { PhoneLoginData, PhoneRegistrationData, UserProfile } from '../types';
 import {
-  GoogleAuthProvider,
-  onAuthStateChanged,
-  signInWithPopup,
-  signOut as firebaseSignOut,
-  User as FirebaseUser
-} from 'firebase/auth';
-import { auth } from '../firebase/config';
-import { UserProfile } from '../types';
-import {
-  BOOTSTRAP_ADMIN_EMAIL,
+  BOOTSTRAP_ADMIN_PHONE,
   checkIsAdmin,
-  getOrCreateUserProfile,
+  getUserProfile,
+  loginUserWithPhone,
+  registerUserWithPhone,
+  requestPhoneResetOtp,
   seedInitialPlatformData,
-  subscribeToUserProfile
+  subscribeToUserProfile,
+  verifyPhoneResetOtpAndSetPassword
 } from '../services/db';
 
 interface AuthContextType {
   currentUser: UserProfile | null;
-  firebaseUser: FirebaseUser | null;
   loading: boolean;
   isAdmin: boolean;
-  loginWithGoogle: () => Promise<void>;
-  loginAsDemoUser: () => Promise<void>;
-  loginAsDemoAdmin: () => Promise<void>;
+  login: (phoneNumber: string, password: string, countryCode?: string) => Promise<UserProfile>;
+  register: (data: PhoneRegistrationData) => Promise<UserProfile>;
+  requestOtp: (phoneNumber: string, countryCode?: string) => Promise<{ resetId: string; otpCode: string; phoneNumber: string }>;
+  resetPasswordWithOtp: (resetId: string, otp: string, newPassword: string) => Promise<{ success: boolean; message: string }>;
   logout: () => Promise<void>;
   activeViewRole: 'user' | 'admin';
   setActiveViewRole: (role: 'user' | 'admin') => void;
   refreshProfile: () => Promise<void>;
+  databaseEngine: 'firebase' | 'supabase';
+  setDatabaseEngine: (engine: 'firebase' | 'supabase') => void;
+  isSupabaseReady: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const SESSION_KEY = 'finvanta_auth_uid';
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [activeViewRole, setActiveViewRole] = useState<'user' | 'admin'>('user');
+  const [databaseEngine, setDatabaseEngine] = useState<'firebase' | 'supabase'>('firebase');
+  const [isSupabaseReady, setIsSupabaseReady] = useState<boolean>(isSupabaseConfigured);
 
-  // Seed default plans and settings on boot
+  // Initialize central database seeds (default plans, platform configuration, root admin account)
   useEffect(() => {
     seedInitialPlatformData();
+    setIsSupabaseReady(isSupabaseConfigured);
   }, []);
 
-  // Listen to Firebase auth state
+  // Restore authenticated session from central server using stored session token
   useEffect(() => {
     let unsubscribeProfile: (() => void) | null = null;
 
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setFirebaseUser(user);
-        try {
-          // Sync profile in Firestore
-          const profile = await getOrCreateUserProfile(
-            user.uid,
-            user.email || 'user@vortex.capital',
-            user.displayName,
-            user.photoURL
-          );
-          setCurrentUser(profile);
+    const restoreSession = async () => {
+      try {
+        const storedUid =
+          sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY);
 
-          const adminStatus = await checkIsAdmin(user.uid, user.email);
-          setIsAdmin(adminStatus || profile.role === 'admin');
+        if (storedUid) {
+          // Fetch authoritative profile directly from the central database
+          const profile = await getUserProfile(storedUid);
+          if (profile && profile.status === 'active') {
+            setCurrentUser(profile);
+            const adminStatus = await checkIsAdmin(profile.uid, profile.phoneNumber);
+            setIsAdmin(adminStatus || profile.role === 'admin');
 
-          // Listen to live updates to user's balance and state
-          unsubscribeProfile = subscribeToUserProfile(user.uid, (updatedProfile) => {
-            if (updatedProfile) {
-              setCurrentUser(updatedProfile);
-            }
-          });
-        } catch (err) {
-          console.error('Error synchronizing user profile:', err);
-        } finally {
-          setLoading(false);
-        }
-      } else {
-        setFirebaseUser(null);
-        // Check if demo user is stored in session
-        const demoUser = localStorage.getItem('vortex_demo_session');
-        if (demoUser) {
-          try {
-            const parsed = JSON.parse(demoUser) as UserProfile;
-            setCurrentUser(parsed);
-            setIsAdmin(parsed.role === 'admin' || parsed.email.toLowerCase() === BOOTSTRAP_ADMIN_EMAIL.toLowerCase());
-          } catch {
+            // Subscribe to live authoritative updates (balance, investments, KYC)
+            unsubscribeProfile = subscribeToUserProfile(profile.uid, (updated) => {
+              if (updated) {
+                setCurrentUser(updated);
+              }
+            });
+          } else {
+            // Invalid or suspended session
+            sessionStorage.removeItem(SESSION_KEY);
+            localStorage.removeItem(SESSION_KEY);
             setCurrentUser(null);
+            setIsAdmin(false);
           }
-        } else {
-          setCurrentUser(null);
-          setIsAdmin(false);
         }
+      } catch (err) {
+        console.error('Session restoration error:', err);
+      } finally {
         setLoading(false);
       }
-    });
+    };
+
+    restoreSession();
 
     return () => {
-      unsubscribeAuth();
-      if (unsubscribeProfile) unsubscribeProfile();
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+      }
     };
   }, []);
 
-  const loginWithGoogle = async () => {
+  // Login with phone number and password
+  const login = async (phoneNumber: string, password: string, countryCode = '+234'): Promise<UserProfile> => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
-      const result = await signInWithPopup(auth, provider);
-      localStorage.removeItem('vortex_demo_session');
-      const profile = await getOrCreateUserProfile(
-        result.user.uid,
-        result.user.email || 'investor@vortex.capital',
-        result.user.displayName,
-        result.user.photoURL
-      );
+      const profile = await loginUserWithPhone(phoneNumber, password, countryCode);
+
+      // Persist session identifier across reloads (authoritative data is always fetched from server)
+      sessionStorage.setItem(SESSION_KEY, profile.uid);
+      localStorage.setItem(SESSION_KEY, profile.uid);
+
       setCurrentUser(profile);
-      const adminStatus = await checkIsAdmin(result.user.uid, result.user.email);
-      setIsAdmin(adminStatus);
-    } catch (error) {
-      console.error('Google Sign In error:', error);
-      throw error;
+      const adminStatus = await checkIsAdmin(profile.uid, profile.phoneNumber);
+      setIsAdmin(adminStatus || profile.role === 'admin');
+
+      if (adminStatus || profile.role === 'admin') {
+        setActiveViewRole('admin');
+      } else {
+        setActiveViewRole('user');
+      }
+
+      // Sync with Supabase if configured
+      if (isSupabaseConfigured && supabase) {
+        try {
+          await supabase.auth.signInWithPassword({
+            phone: profile.phoneNumber,
+            password
+          });
+        } catch {
+          // Supabase sync fallback
+        }
+      }
+
+      return profile;
     } finally {
       setLoading(false);
     }
   };
 
-  const loginAsDemoUser = async () => {
+  // Register new account with phone number and password
+  const register = async (data: PhoneRegistrationData): Promise<UserProfile> => {
     setLoading(true);
-    const demoUid = 'demo_investor_apex';
-    const profile: UserProfile = {
-      uid: demoUid,
-      email: 'alex.chen@vortex-apex.internal',
-      displayName: 'Alex Chen (Quant Investor)',
-      photoURL: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-      role: 'user',
-      balance: 14850.0,
-      totalInvested: 35000.0,
-      totalEarned: 6420.0,
-      totalWithdrawn: 4200.0,
-      totalDeposited: 47630.0,
-      referralCode: 'VX-ALEX88',
-      referredBy: '',
-      twoFactorEnabled: true,
-      status: 'active',
-      kycStatus: 'verified',
-      createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    setCurrentUser(profile);
-    setIsAdmin(false);
-    setActiveViewRole('user');
-    localStorage.setItem('vortex_demo_session', JSON.stringify(profile));
-    setLoading(false);
-  };
-
-  const loginAsDemoAdmin = async () => {
-    setLoading(true);
-    const adminUid = 'demo_superadmin_apex';
-    const profile: UserProfile = {
-      uid: adminUid,
-      email: BOOTSTRAP_ADMIN_EMAIL,
-      displayName: 'Amaka Joy Nwosu (Superadmin)',
-      photoURL: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-      role: 'admin',
-      balance: 125000.0,
-      totalInvested: 85000.0,
-      totalEarned: 24650.0,
-      totalWithdrawn: 12000.0,
-      totalDeposited: 196650.0,
-      referralCode: 'VX-AMAKA1',
-      twoFactorEnabled: true,
-      status: 'active',
-      kycStatus: 'verified',
-      createdAt: new Date(Date.now() - 60 * 86400000).toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    setCurrentUser(profile);
-    setIsAdmin(true);
-    setActiveViewRole('admin');
-    localStorage.setItem('vortex_demo_session', JSON.stringify(profile));
-    setLoading(false);
-  };
-
-  const logout = async () => {
     try {
-      localStorage.removeItem('vortex_demo_session');
-      await firebaseSignOut(auth);
-      setCurrentUser(null);
+      const profile = await registerUserWithPhone(data);
+
+      // Persist session identifier
+      sessionStorage.setItem(SESSION_KEY, profile.uid);
+      localStorage.setItem(SESSION_KEY, profile.uid);
+
+      setCurrentUser(profile);
       setIsAdmin(false);
       setActiveViewRole('user');
-    } catch (error) {
-      console.error('Logout error:', error);
+
+      // Sync with Supabase Auth if configured
+      if (isSupabaseConfigured && supabase) {
+        try {
+          await supabase.auth.signUp({
+            phone: profile.phoneNumber,
+            password: data.password,
+            options: {
+              data: {
+                first_name: data.firstName,
+                last_name: data.lastName,
+                phone: profile.phoneNumber
+              }
+            }
+          });
+        } catch {
+          // Supabase sync fallback
+        }
+      }
+
+      return profile;
+    } finally {
+      setLoading(false);
     }
   };
 
+  // Request password reset OTP
+  const requestOtp = async (phoneNumber: string, countryCode = '+234') => {
+    return await requestPhoneResetOtp(phoneNumber, countryCode);
+  };
+
+  // Reset password using verified OTP
+  const resetPasswordWithOtp = async (resetId: string, otp: string, newPassword: string) => {
+    return await verifyPhoneResetOtpAndSetPassword(resetId, otp, newPassword);
+  };
+
+  // Logout
+  const logout = async () => {
+    sessionStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem('finvanta_demo_session');
+    setCurrentUser(null);
+    setIsAdmin(false);
+    setActiveViewRole('user');
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        // no-op
+      }
+    }
+  };
+
+  // Refresh profile from central database
   const refreshProfile = async () => {
-    if (currentUser?.uid && firebaseUser) {
-      const p = await getOrCreateUserProfile(
-        currentUser.uid,
-        currentUser.email,
-        currentUser.displayName
-      );
-      setCurrentUser(p);
+    if (currentUser?.uid) {
+      const fresh = await getUserProfile(currentUser.uid);
+      if (fresh) {
+        setCurrentUser(fresh);
+      }
     }
   };
 
@@ -209,16 +218,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider
       value={{
         currentUser,
-        firebaseUser,
         loading,
         isAdmin,
-        loginWithGoogle,
-        loginAsDemoUser,
-        loginAsDemoAdmin,
+        login,
+        register,
+        requestOtp,
+        resetPasswordWithOtp,
         logout,
         activeViewRole,
         setActiveViewRole,
-        refreshProfile
+        refreshProfile,
+        databaseEngine,
+        setDatabaseEngine,
+        isSupabaseReady
       }}
     >
       {children}
