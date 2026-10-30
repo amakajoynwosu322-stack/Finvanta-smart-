@@ -1,0 +1,6 @@
+{
+  "name": "Vortex Capital",
+  "description": "Premium futuristic investment and quantitative yield platform featuring autonomous portfolios, transparent multi-tier plans, real-time analytics, and comprehensive administrative controls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

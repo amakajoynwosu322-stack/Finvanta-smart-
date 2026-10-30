@@ -1,0 +1,286 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile, balance, and account state",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "displayName": { "type": "string", "maxLength": 128 },
+        "photoURL": { "type": "string", "maxLength": 512 },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "balance": { "type": "number" },
+        "totalInvested": { "type": "number" },
+        "totalEarned": { "type": "number" },
+        "totalWithdrawn": { "type": "number" },
+        "totalDeposited": { "type": "number" },
+        "referralCode": { "type": "string", "maxLength": 32 },
+        "referredBy": { "type": "string", "maxLength": 32 },
+        "twoFactorEnabled": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["active", "suspended"] },
+        "kycStatus": { "type": "string", "enum": ["unverified", "pending", "verified"] },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["uid", "email", "balance", "totalInvested", "totalEarned"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Authorized administrator records",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 256 },
+        "role": { "type": "string", "enum": ["superadmin", "admin"] },
+        "addedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["email", "role"]
+    },
+    "InvestmentPlan": {
+      "title": "InvestmentPlan",
+      "description": "Curated autonomous investment packages",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 128 },
+        "description": { "type": "string", "maxLength": 512 },
+        "category": { "type": "string", "maxLength": 64 },
+        "minDeposit": { "type": "number" },
+        "maxDeposit": { "type": "number" },
+        "dailyRoi": { "type": "number" },
+        "totalRoi": { "type": "number" },
+        "durationDays": { "type": "number" },
+        "riskLevel": { "type": "string", "enum": ["Conservative", "Balanced", "Aggressive", "Institutional"] },
+        "capitalReturn": { "type": "boolean" },
+        "active": { "type": "boolean" },
+        "features": { "type": "array" },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "name", "minDeposit", "maxDeposit", "dailyRoi", "durationDays"]
+    },
+    "Investment": {
+      "title": "Investment",
+      "description": "Individual active or completed user investments",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userEmail": { "type": "string", "maxLength": 256 },
+        "userName": { "type": "string", "maxLength": 128 },
+        "planId": { "type": "string", "maxLength": 64 },
+        "planName": { "type": "string", "maxLength": 128 },
+        "amount": { "type": "number" },
+        "dailyRoi": { "type": "number" },
+        "totalRoiExpected": { "type": "number" },
+        "durationDays": { "type": "number" },
+        "startDate": { "type": "string", "maxLength": 64 },
+        "endDate": { "type": "string", "maxLength": 64 },
+        "daysElapsed": { "type": "number" },
+        "totalEarned": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "completed", "cancelled"] },
+        "lastProfitClaimDate": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "userId", "planId", "amount", "status"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial ledger of all deposits, withdrawals, and payouts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userEmail": { "type": "string", "maxLength": 256 },
+        "userName": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "enum": ["deposit", "withdrawal", "investment", "roi_payout", "referral_bonus", "admin_adjustment"] },
+        "amount": { "type": "number" },
+        "currency": { "type": "string", "maxLength": 16 },
+        "status": { "type": "string", "enum": ["completed", "pending", "rejected"] },
+        "reference": { "type": "string", "maxLength": 128 },
+        "note": { "type": "string", "maxLength": 256 },
+        "paymentMethod": { "type": "string", "maxLength": 64 },
+        "destinationAddress": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "userId", "type", "amount", "status", "createdAt"]
+    },
+    "DepositRequest": {
+      "title": "DepositRequest",
+      "description": "Simulated deposits submitted for verification",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userEmail": { "type": "string", "maxLength": 256 },
+        "userName": { "type": "string", "maxLength": 128 },
+        "amount": { "type": "number" },
+        "currency": { "type": "string", "maxLength": 16 },
+        "network": { "type": "string", "maxLength": 32 },
+        "txHash": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "adminNotes": { "type": "string", "maxLength": 256 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "userId", "amount", "currency", "status"]
+    },
+    "WithdrawalRequest": {
+      "title": "WithdrawalRequest",
+      "description": "Simulated withdrawal payout requests",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userEmail": { "type": "string", "maxLength": 256 },
+        "userName": { "type": "string", "maxLength": 128 },
+        "amount": { "type": "number" },
+        "currency": { "type": "string", "maxLength": 16 },
+        "network": { "type": "string", "maxLength": 32 },
+        "walletAddress": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "adminNotes": { "type": "string", "maxLength": 256 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "userId", "amount", "currency", "walletAddress", "status"]
+    },
+    "Referral": {
+      "title": "Referral",
+      "description": "Affiliate network linkage and earnings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "referrerId": { "type": "string", "maxLength": 128 },
+        "referredUserId": { "type": "string", "maxLength": 128 },
+        "referredUserEmail": { "type": "string", "maxLength": 256 },
+        "referredUserName": { "type": "string", "maxLength": 128 },
+        "commissionEarned": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "pending"] },
+        "level": { "type": "number" },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "referrerId", "referredUserId", "commissionEarned"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Platform broadcast alerts and updates",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "title": { "type": "string", "maxLength": 128 },
+        "content": { "type": "string", "maxLength": 1024 },
+        "category": { "type": "string", "enum": ["system", "market_update", "yield_boost", "maintenance"] },
+        "priority": { "type": "string", "enum": ["low", "normal", "urgent"] },
+        "active": { "type": "boolean" },
+        "author": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "title", "content", "category", "active"]
+    },
+    "SupportTicket": {
+      "title": "SupportTicket",
+      "description": "Customer assistance and priority inquiry requests",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userEmail": { "type": "string", "maxLength": 256 },
+        "userName": { "type": "string", "maxLength": 128 },
+        "subject": { "type": "string", "maxLength": 128 },
+        "message": { "type": "string", "maxLength": 1024 },
+        "category": { "type": "string", "enum": ["deposit", "withdrawal", "investment", "security", "general"] },
+        "status": { "type": "string", "enum": ["open", "in_progress", "resolved", "closed"] },
+        "priority": { "type": "string", "enum": ["low", "medium", "high", "urgent"] },
+        "adminReply": { "type": "string", "maxLength": 1024 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "userId", "subject", "message", "status"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "User specific or broadcast in-app alerts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 128 },
+        "message": { "type": "string", "maxLength": 512 },
+        "type": { "type": "string", "enum": ["system", "transaction", "investment", "security", "promo"] },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "userId", "title", "message", "read"]
+    },
+    "PlatformConfig": {
+      "title": "PlatformConfig",
+      "description": "Global operational parameters and simulated crypto addresses",
+      "type": "object",
+      "properties": {
+        "platformName": { "type": "string", "maxLength": 64 },
+        "minDeposit": { "type": "number" },
+        "minWithdrawal": { "type": "number" },
+        "withdrawalFeePercentage": { "type": "number" },
+        "referralBonusPercentage": { "type": "number" },
+        "maintenanceMode": { "type": "boolean" },
+        "allowNewRegistrations": { "type": "boolean" },
+        "usdtTrc20Address": { "type": "string", "maxLength": 128 },
+        "btcAddress": { "type": "string", "maxLength": 128 },
+        "ethAddress": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["platformName", "minDeposit", "minWithdrawal"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile, balance, and account state"
+    },
+    "/admins/{userId}": {
+      "schema": "Admin",
+      "description": "Authorized administrator registry"
+    },
+    "/investmentPlans/{planId}": {
+      "schema": "InvestmentPlan",
+      "description": "Pre-configured algorithmic investment packages"
+    },
+    "/investments/{investmentId}": {
+      "schema": "Investment",
+      "description": "Active and past investment contracts"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Financial ledger of user transactions"
+    },
+    "/depositRequests/{requestId}": {
+      "schema": "DepositRequest",
+      "description": "Simulated deposits submitted for administrative review"
+    },
+    "/withdrawalRequests/{requestId}": {
+      "schema": "WithdrawalRequest",
+      "description": "Simulated withdrawals awaiting administrative disbursement"
+    },
+    "/referrals/{referralId}": {
+      "schema": "Referral",
+      "description": "Multi-tier affiliate network connections"
+    },
+    "/announcements/{announcementId}": {
+      "schema": "Announcement",
+      "description": "Public system announcements and market advisories"
+    },
+    "/supportTickets/{ticketId}": {
+      "schema": "SupportTicket",
+      "description": "Support tickets raised by platform users"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "Direct alerts and updates dispatched to users"
+    },
+    "/platformConfig/{configId}": {
+      "schema": "PlatformConfig",
+      "description": "Global platform settings"
+    }
+  }
+}

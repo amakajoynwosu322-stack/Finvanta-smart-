@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-dark: #090711;
+    --card-dark: #171225;
+    --card-border: rgba(139, 92, 246, 0.18);
+    --primary-purple: #8B5CF6;
+    --neon-purple: #B66DFF;
+  }
+
+  body {
+    background-color: #090711;
+    color: #F8FAFC;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom futuristic scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0d0a18;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a1f47;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #8b5cf6;
+}
+
+/* Neon glow utilities */
+.glow-purple {
+  box-shadow: 0 0 25px -3px rgba(139, 92, 246, 0.25), 0 0 10px -2px rgba(182, 109, 255, 0.3);
+}
+
+.glow-purple-sm {
+  box-shadow: 0 0 15px -2px rgba(139, 92, 246, 0.2);
+}
+
+.glow-purple-lg {
+  box-shadow: 0 0 40px 0px rgba(139, 92, 246, 0.35);
+}
+
+.glow-neon-text {
+  text-shadow: 0 0 12px rgba(182, 109, 255, 0.6);
+}
+
+.border-glow {
+  border-color: rgba(139, 92, 246, 0.25);
+}
+.border-glow:hover {
+  border-color: rgba(182, 109, 255, 0.5);
+}
+
+/* Card glass styling */
+.glass-card {
+  background-color: #171225;
+  border: 1px solid rgba(139, 92, 246, 0.16);
+  backdrop-filter: blur(12px);
+}
+
+.glass-card-hover {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glass-card-hover:hover {
+  transform: translateY(-2px);
+  border-color: rgba(182, 109, 255, 0.38);
+  box-shadow: 0 12px 30px -10px rgba(139, 92, 246, 0.2);
+}
+
+/* Background mesh gradients */
+.bg-mesh {
+  background-image: 
+    radial-gradient(at 10% 20%, rgba(139, 92, 246, 0.12) 0px, transparent 50%),
+    radial-gradient(at 90% 10%, rgba(182, 109, 255, 0.08) 0px, transparent 40%),
+    radial-gradient(at 50% 85%, rgba(88, 28, 135, 0.1) 0px, transparent 60%);
+}
