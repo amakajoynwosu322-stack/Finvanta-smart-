@@ -32,6 +32,7 @@ import { NotificationsTab } from './components/user/NotificationsTab';
 import { ProfileTab } from './components/user/ProfileTab';
 import { SecurityTab } from './components/user/SecurityTab';
 import { SupportTab } from './components/user/SupportTab';
+import { DailyTasksTab } from './components/user/DailyTasksTab';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 
 import {
@@ -47,15 +48,18 @@ import {
   UserProfile,
   WithdrawalRequest
 } from './types';
-import { DEFAULT_PLANS, DEFAULT_PLATFORM_CONFIG } from './services/db';
+import { checkAndExpireMonthlyPlans, DEFAULT_PLANS, DEFAULT_PLATFORM_CONFIG } from './services/db';
 import {
   ArrowDownCircle,
+  Award,
   Briefcase,
+  History,
   Layers,
   LayoutDashboard,
   PieChart,
   Sparkles,
   TrendingUp,
+  User,
   Wallet
 } from 'lucide-react';
 
@@ -131,6 +135,11 @@ const MainApp: React.FC = () => {
     );
     return () => unsub();
   }, [refreshTrigger]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    checkAndExpireMonthlyPlans(currentUser);
+  }, [currentUser]);
 
   // Sync User-Scoped or Admin-Scoped Collections
   useEffect(() => {
@@ -384,6 +393,15 @@ const MainApp: React.FC = () => {
                 />
               )}
 
+              {currentTab === 'tasks' && (
+                <DailyTasksTab
+                  user={effectiveUser}
+                  investments={investments}
+                  onNavigateTab={setCurrentTab}
+                  onRefresh={triggerRefresh}
+                />
+              )}
+
               {currentTab === 'profile' && (
                 <ProfileTab user={effectiveUser} onRefresh={triggerRefresh} />
               )}
@@ -422,81 +440,93 @@ const MainApp: React.FC = () => {
         </main>
       </div>
 
-      {/* Mobile Bottom Quick Bar */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#090711]/95 backdrop-blur-lg border-t border-[#8B5CF6]/20 px-3 py-2 flex items-center justify-around">
+      {/* 10. MOBILE BOTTOM NAVIGATION: Home, Plans, Tasks, Activity, Profile */}
+      <nav aria-label="Mobile Navigation" className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#090711]/95 backdrop-blur-lg border-t border-[#8B5CF6]/20 px-3 py-2 flex items-center justify-around shadow-2xl">
+        {/* 1. Home */}
         <button
           onClick={() => {
             setActiveViewRole('user');
             setCurrentTab('overview');
           }}
-          className={`flex flex-col items-center gap-1 text-[10px] font-medium transition-colors ${
+          className={`flex flex-col items-center gap-1 text-[10px] font-medium transition-colors py-1 px-2 ${
             currentTab === 'overview' && activeViewRole === 'user'
               ? 'text-[#B66DFF] font-bold'
-              : 'text-slate-400'
+              : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <LayoutDashboard className="w-4 h-4" />
+          <LayoutDashboard className="w-5 h-5" />
           <span>Home</span>
         </button>
 
+        {/* 2. Plans */}
         <button
           onClick={() => {
             setActiveViewRole('user');
             setCurrentTab('investment_plans');
           }}
-          className={`flex flex-col items-center gap-1 text-[10px] font-medium transition-colors ${
+          className={`flex flex-col items-center gap-1 text-[10px] font-medium transition-colors py-1 px-2 ${
             currentTab === 'investment_plans'
               ? 'text-[#B66DFF] font-bold'
-              : 'text-slate-400'
+              : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <TrendingUp className="w-4 h-4" />
+          <TrendingUp className="w-5 h-5" />
           <span>Plans</span>
         </button>
 
+        {/* 3. Tasks */}
         <button
           onClick={() => {
             setActiveViewRole('user');
-            setCurrentTab('deposit');
+            setCurrentTab('tasks');
           }}
-          className="flex flex-col items-center -mt-5"
+          className={`flex flex-col items-center gap-1 text-[10px] font-medium transition-colors py-1 px-2 ${
+            currentTab === 'tasks'
+              ? 'text-amber-400 font-bold'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
         >
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#8B5CF6] to-[#B66DFF] flex items-center justify-center text-slate-950 font-bold shadow-lg shadow-[#8B5CF6]/30">
-            <ArrowDownCircle className="w-6 h-6 text-slate-950" />
+          <div className="relative">
+            <Award className="w-5 h-5" />
+            {(currentUser?.completedTaskIds?.length || 0) < 4 && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            )}
           </div>
-          <span className="text-[9px] text-[#C4B5FD] mt-1 font-bold">Deposit</span>
+          <span>Tasks</span>
         </button>
 
+        {/* 4. Activity */}
         <button
           onClick={() => {
             setActiveViewRole('user');
-            setCurrentTab('portfolio');
+            setCurrentTab('transactions');
           }}
-          className={`flex flex-col items-center gap-1 text-[10px] font-medium transition-colors ${
-            currentTab === 'portfolio'
+          className={`flex flex-col items-center gap-1 text-[10px] font-medium transition-colors py-1 px-2 ${
+            currentTab === 'transactions'
               ? 'text-[#B66DFF] font-bold'
-              : 'text-slate-400'
+              : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <PieChart className="w-4 h-4" />
-          <span>Portfolio</span>
+          <History className="w-5 h-5" />
+          <span>Activity</span>
         </button>
 
+        {/* 5. Profile */}
         <button
           onClick={() => {
             setActiveViewRole('user');
-            setCurrentTab('available_balance');
+            setCurrentTab('profile');
           }}
-          className={`flex flex-col items-center gap-1 text-[10px] font-medium transition-colors ${
-            currentTab === 'available_balance'
+          className={`flex flex-col items-center gap-1 text-[10px] font-medium transition-colors py-1 px-2 ${
+            currentTab === 'profile'
               ? 'text-[#B66DFF] font-bold'
-              : 'text-slate-400'
+              : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Wallet className="w-4 h-4" />
-          <span>Balance</span>
+          <User className="w-5 h-5" />
+          <span>Profile</span>
         </button>
-      </div>
+      </nav>
 
       {/* Auth Modal */}
       <AuthModal

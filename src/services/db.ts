@@ -28,7 +28,8 @@ import {
   PhoneLoginData,
   PhoneResetRequest,
   PromoCode,
-  PromoCodeUsage
+  PromoCodeUsage,
+  DailyTask
 } from '../types';
 import {
   normalizePhoneNumber,
@@ -38,109 +39,249 @@ import {
   generateSecureOtp,
   validatePasswordStrength
 } from './crypto';
+import {
+  getWatTime,
+  getAffiliateWithdrawalStatus,
+  getTaskWithdrawalStatus,
+  isPlanEligibleForMonthlyExpiration,
+  getTrustedTimestamp
+} from '../utils/watTime';
 
 export const BOOTSTRAP_ADMIN_EMAIL = 'amakajoynwosu322@gmail.com';
 export const BOOTSTRAP_ADMIN_PHONE = '+2348000000001';
 export const BOOTSTRAP_ADMIN_UID = 'adm_finvanta_root_001';
 
+export interface PlanTaskItem {
+  tierKey: 'tier_1' | 'popular' | 'tier_3' | 'tier_4' | 'premier';
+  tierName: string;
+  taskId: string;
+  title: string;
+  description: string;
+  dailyRewardNaira: number;
+  taskResetHours: number;
+  estimatedMinutes: number;
+  badge: string;
+}
+
+export const PLAN_TIER_TASKS: Record<string, PlanTaskItem> = {
+  tier_1: {
+    tierKey: 'tier_1',
+    tierName: 'Tier 1',
+    taskId: 'task_tier_1',
+    title: 'Tier 1 Daily Liquidity Verification',
+    description: 'Perform daily simulated capital health check and verify starter treasury allocation.',
+    dailyRewardNaira: 400,
+    taskResetHours: 24,
+    estimatedMinutes: 1,
+    badge: 'Tier 1 Exclusive'
+  },
+  popular: {
+    tierKey: 'popular',
+    tierName: 'Popular',
+    taskId: 'task_popular',
+    title: 'Popular Growth Protocol & Treasury Check',
+    description: 'Verify daily portfolio allocation metrics and review sovereign money-market indices.',
+    dailyRewardNaira: 600,
+    taskResetHours: 24,
+    estimatedMinutes: 1,
+    badge: 'Most Popular'
+  },
+  tier_3: {
+    tierKey: 'tier_3',
+    tierName: 'Tier 3',
+    taskId: 'task_tier_3',
+    title: 'Tier 3 Sovereign Notes & Yield Audit',
+    description: 'Audit sovereign notes risk-adjusted yield survey and inspect asset diversification data.',
+    dailyRewardNaira: 900,
+    taskResetHours: 24,
+    estimatedMinutes: 2,
+    badge: 'Tier 3 Exclusive'
+  },
+  tier_4: {
+    tierKey: 'tier_4',
+    tierName: 'Tier 4',
+    taskId: 'task_tier_4',
+    title: 'Tier 4 Institutional Risk Validation',
+    description: 'Perform institutional liquidity consensus review and inspect commercial paper yields.',
+    dailyRewardNaira: 1300,
+    taskResetHours: 24,
+    estimatedMinutes: 2,
+    badge: 'Tier 4 Exclusive'
+  },
+  premier: {
+    tierKey: 'premier',
+    tierName: 'Premier',
+    taskId: 'task_premier',
+    title: 'Premier Executive Sovereign Audit',
+    description: 'Execute top-tier sovereign syndicate allocation audit and claim maximum daily task dividend.',
+    dailyRewardNaira: 1700,
+    taskResetHours: 24,
+    estimatedMinutes: 2,
+    badge: 'Premier Exclusive'
+  }
+};
+
+export const DEFAULT_DAILY_TASKS: DailyTask[] = Object.values(PLAN_TIER_TASKS).map((pt) => ({
+  id: pt.taskId,
+  title: pt.title,
+  description: pt.description,
+  rewardNaira: pt.dailyRewardNaira,
+  category: 'check_in',
+  estimatedMinutes: pt.estimatedMinutes
+}));
+
 export const DEFAULT_PLANS: InvestmentPlan[] = [
   {
-    id: 'plan_quantum_alpha',
-    name: 'Quantum Alpha Momentum',
-    category: 'High Frequency Algorithmic',
-    description: 'Dynamic automated order-flow quantitative strategies capturing micro-arbitrage across global digital exchanges.',
-    minDeposit: 100,
-    maxDeposit: 4999,
-    dailyRoi: 1.5,
-    totalRoi: 45,
+    id: 'plan_tier_1',
+    name: 'Tier 1',
+    tierKey: 'tier_1',
+    category: 'Starter Treasury Protocol',
+    description: 'Fundamental simulated liquidity allocation designed for foundational portfolio growth.',
+    simulatedCapital: 1500,
+    projectedValue: 12000,
+    dailyTaskReward: 400,
+    taskResetHours: 24,
+    minDeposit: 1500,
+    maxDeposit: 1500,
+    dailyRoi: 1.15,
+    totalRoi: 700,
     durationDays: 30,
     riskLevel: 'Conservative',
     capitalReturn: true,
     active: true,
     features: [
-      'Automated 24/7 rebalancing',
-      'Capital guarantee at term end',
-      'Daily compound capability',
-      'Zero withdrawal fee on maturity',
-      'Full transparency telemetry'
+      'Simulated Capital: ₦1,500',
+      'Illustrative Projected Value: ₦12,000',
+      'Daily Simulated Task Reward: ₦400',
+      'Task Reset Interval: Every 24 hours',
+      'Term Duration: 30 days',
+      'Fictional educational simulation'
     ]
   },
   {
-    id: 'plan_neural_arbitrage',
-    name: 'Neural Yield Arbitrage',
-    category: 'Cross-Chain DeFi & Spread',
-    description: 'Multi-pool flash liquidity providing and cross-venue latency arbitrage leveraging sub-millisecond execution engines.',
-    minDeposit: 5000,
-    maxDeposit: 24999,
-    dailyRoi: 2.2,
-    totalRoi: 99,
-    durationDays: 45,
+    id: 'plan_popular',
+    name: 'Popular',
+    tierKey: 'popular',
+    isPopular: true,
+    category: 'Growth Wealth Builder',
+    description: 'Our most popular simulated wealth package featuring accelerated daily task distributions.',
+    simulatedCapital: 3000,
+    projectedValue: 18000,
+    dailyTaskReward: 600,
+    taskResetHours: 24,
+    minDeposit: 3000,
+    maxDeposit: 3000,
+    dailyRoi: 1.67,
+    totalRoi: 500,
+    durationDays: 30,
     riskLevel: 'Balanced',
     capitalReturn: true,
     active: true,
     features: [
-      'Institutional tier priority queues',
-      'Smart contract audited routing',
-      'Daily automated profit accrual',
-      'Dedicated quantitative risk manager',
-      '100% principal return guarantee'
+      'Most Popular Choice',
+      'Simulated Capital: ₦3,000',
+      'Illustrative Projected Value: ₦18,000',
+      'Daily Simulated Task Reward: ₦600',
+      'Task Reset Interval: Every 24 hours',
+      'Term Duration: 30 days',
+      'Fictional educational simulation'
     ]
   },
   {
-    id: 'plan_apex_institutional',
-    name: 'Apex Sovereign Matrix',
-    category: 'Institutional Market Making',
-    description: 'Bespoke liquidity provision, derivatives gamma scalping, and volatility arbitrage for high-volume capital portfolios.',
-    minDeposit: 25000,
-    maxDeposit: 250000,
-    dailyRoi: 3.1,
-    totalRoi: 186,
-    durationDays: 60,
+    id: 'plan_tier_3',
+    name: 'Tier 3',
+    tierKey: 'tier_3',
+    category: 'Advanced Sovereign Allocation',
+    description: 'Enhanced simulated sovereign growth strategy providing elevated daily task returns.',
+    simulatedCapital: 6000,
+    projectedValue: 27000,
+    dailyTaskReward: 900,
+    taskResetHours: 24,
+    minDeposit: 6000,
+    maxDeposit: 6000,
+    dailyRoi: 1.5,
+    totalRoi: 350,
+    durationDays: 30,
+    riskLevel: 'Balanced',
+    capitalReturn: true,
+    active: true,
+    features: [
+      'Simulated Capital: ₦6,000',
+      'Illustrative Projected Value: ₦27,000',
+      'Daily Simulated Task Reward: ₦900',
+      'Task Reset Interval: Every 24 hours',
+      'Term Duration: 30 days',
+      'Fictional educational simulation'
+    ]
+  },
+  {
+    id: 'plan_tier_4',
+    name: 'Tier 4',
+    tierKey: 'tier_4',
+    category: 'Institutional Syndicate Strategy',
+    description: 'High-performance simulated institutional package for advanced portfolio expansion.',
+    simulatedCapital: 9000,
+    projectedValue: 39000,
+    dailyTaskReward: 1300,
+    taskResetHours: 24,
+    minDeposit: 9000,
+    maxDeposit: 9000,
+    dailyRoi: 1.45,
+    totalRoi: 333,
+    durationDays: 30,
     riskLevel: 'Aggressive',
     capitalReturn: true,
     active: true,
     features: [
-      'VIP Tier 1 priority settlement',
-      'Deep order-book rebate capture',
-      'Daily instant withdrawals',
-      'Direct OTC desk access',
-      'Comprehensive audit logs'
+      'Simulated Capital: ₦9,000',
+      'Illustrative Projected Value: ₦39,000',
+      'Daily Simulated Task Reward: ₦1,300',
+      'Task Reset Interval: Every 24 hours',
+      'Term Duration: 30 days',
+      'Fictional educational simulation'
     ]
   },
   {
-    id: 'plan_defi_perpetuals',
-    name: 'Perpetuals Quant Syndicate',
-    category: 'Delta-Neutral Futures',
-    description: 'Algorithmic delta-neutral basis trading harvesting perpetual funding rates while neutralizing directional market volatility.',
-    minDeposit: 500,
-    maxDeposit: 15000,
-    dailyRoi: 1.85,
-    totalRoi: 74,
-    durationDays: 40,
-    riskLevel: 'Balanced',
+    id: 'plan_premier',
+    name: 'Premier',
+    tierKey: 'premier',
+    category: 'Executive Sovereign Syndicate',
+    description: 'Top-tier simulated executive portfolio offering the maximum daily task reward dividend.',
+    simulatedCapital: 12000,
+    projectedValue: 51000,
+    dailyTaskReward: 1700,
+    taskResetHours: 24,
+    minDeposit: 12000,
+    maxDeposit: 12000,
+    dailyRoi: 1.42,
+    totalRoi: 325,
+    durationDays: 30,
+    riskLevel: 'Institutional',
     capitalReturn: true,
     active: true,
     features: [
-      'Hedging across Binance & Bybit perp basis',
-      'Zero liquidation risk delta-neutral hedge',
-      'Daily ROI automatic distribution',
-      'Mid-term flexible reinvestment',
-      '24/7 Live liquidation shields'
+      'Top-Tier Executive Status',
+      'Simulated Capital: ₦12,000',
+      'Illustrative Projected Value: ₦51,000',
+      'Daily Simulated Task Reward: ₦1,700',
+      'Task Reset Interval: Every 24 hours',
+      'Term Duration: 30 days',
+      'Fictional educational simulation'
     ]
   }
 ];
 
 export const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
   platformName: 'FINVANTA',
-  minDeposit: 50,
-  minWithdrawal: 25,
+  minDeposit: 10000,
+  minWithdrawal: 5000,
   withdrawalFeePercentage: 1.5,
   referralBonusPercentage: 7.0,
   maintenanceMode: false,
   allowNewRegistrations: true,
-  usdtTrc20Address: 'TN7zK4qP89FinvantaTRC20Official94bX',
-  btcAddress: 'bc1q9finvantaapexinvestments8492048hqf02k7z',
-  ethAddress: '0x8B5CF6d090711FinvantaMainnetVault92a',
+  usdtTrc20Address: 'FINVANTA Designated Settlement Account - Wema Bank: 0124896721',
+  btcAddress: 'FINVANTA Corporate Vault - Providus Bank: 5401928371',
+  ethAddress: 'FINVANTA Virtual NGN Treasury - Access Bank: 0782910482',
   updatedAt: new Date().toISOString()
 };
 
@@ -178,15 +319,16 @@ export async function seedInitialPlatformData() {
       await setDoc(configRef, DEFAULT_PLATFORM_CONFIG);
     }
 
-    const plansSnap = await getDocs(collection(db, 'investmentPlans'));
-    if (plansSnap.empty) {
-      for (const plan of DEFAULT_PLANS) {
-        await setDoc(doc(db, 'investmentPlans', plan.id), {
+    // Always ensure the 5 official FINVANTA plans exist
+    for (const plan of DEFAULT_PLANS) {
+      await setDoc(
+        doc(db, 'investmentPlans', plan.id),
+        {
           ...plan,
-          createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
-        });
-      }
+        },
+        { merge: true }
+      );
     }
 
     // Seed announcements
@@ -667,26 +809,27 @@ export function subscribeToUserProfile(uid: string, callback: (user: UserProfile
   );
 }
 
-// User invests in a plan
+// User invests in a plan using Main Balance exclusively
 export async function executeInvestment(
   user: UserProfile,
   plan: InvestmentPlan,
   amount: number
 ): Promise<{ success: boolean; message: string }> {
-  if (amount < plan.minDeposit) {
-    return { success: false, message: `Minimum deposit for ${plan.name} is $${plan.minDeposit.toLocaleString()}` };
-  }
-  if (amount > plan.maxDeposit) {
-    return { success: false, message: `Maximum deposit for ${plan.name} is $${plan.maxDeposit.toLocaleString()}` };
+  const capital = plan.simulatedCapital || plan.minDeposit;
+  if (amount < capital) {
+    return { success: false, message: `Required simulated capital for ${plan.name} is ₦${capital.toLocaleString('en-NG')}` };
   }
   if (user.balance < amount) {
-    return { success: false, message: `Insufficient available balance ($${user.balance.toFixed(2)}). Please submit a simulated deposit first.` };
+    return {
+      success: false,
+      message: `Insufficient Main Balance (Available: ₦${user.balance.toLocaleString('en-NG')}). Please fund your wallet via simulated deposit first.`
+    };
   }
 
   const investmentId = `inv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const transactionId = `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const now = new Date();
-  const endDate = new Date(now.getTime() + plan.durationDays * 86400000);
+  const endDate = new Date(now.getTime() + (plan.durationDays || 30) * 86400000);
 
   const newInvestment: Investment = {
     id: investmentId,
@@ -695,16 +838,20 @@ export async function executeInvestment(
     userName: user.displayName,
     planId: plan.id,
     planName: plan.name,
+    tierKey: plan.tierKey || 'tier_1',
     amount,
     dailyRoi: plan.dailyRoi,
-    totalRoiExpected: (amount * plan.dailyRoi * plan.durationDays) / 100,
-    durationDays: plan.durationDays,
+    dailyTaskReward: plan.dailyTaskReward || 400,
+    totalRoiExpected: (amount * plan.dailyRoi * (plan.durationDays || 30)) / 100,
+    projectedValue: plan.projectedValue || 12000,
+    durationDays: plan.durationDays || 30,
     startDate: now.toISOString(),
     endDate: endDate.toISOString(),
     daysElapsed: 0,
     totalEarned: 0,
     status: 'active',
     lastProfitClaimDate: now.toISOString(),
+    lastTaskClaimTimestamp: 0,
     createdAt: now.toISOString()
   };
 
@@ -715,10 +862,10 @@ export async function executeInvestment(
     userName: user.displayName,
     type: 'investment',
     amount,
-    currency: 'USD',
+    currency: 'NGN',
     status: 'completed',
     reference: `INV-${investmentId.slice(-6).toUpperCase()}`,
-    note: `Locked into ${plan.name} (${plan.durationDays} Days @ ${plan.dailyRoi}% daily)`,
+    note: `Purchased ${plan.name} plan (Capital: ₦${amount.toLocaleString('en-NG')}, Daily Task: ₦${(plan.dailyTaskReward || 400).toLocaleString('en-NG')})`,
     createdAt: now.toISOString()
   };
 
@@ -731,12 +878,14 @@ export async function executeInvestment(
       }
       const currentData = userDoc.data() as UserProfile;
       if (currentData.balance < amount) {
-        throw new Error('Insufficient balance');
+        throw new Error('Insufficient Main Balance');
       }
 
       t.update(userRef, {
         balance: currentData.balance - amount,
         totalInvested: (currentData.totalInvested || 0) + amount,
+        activePlanTier: plan.tierKey || 'tier_1',
+        activeInvestmentId: investmentId,
         updatedAt: now.toISOString()
       });
 
@@ -748,16 +897,17 @@ export async function executeInvestment(
     await setDoc(doc(db, 'notifications', `notif_inv_${investmentId}`), {
       id: `notif_inv_${investmentId}`,
       userId: user.uid,
-      title: 'Investment Activated',
-      message: `Successfully allocated $${amount.toLocaleString()} to ${plan.name}. Profits accrue daily.`,
+      title: 'Plan Activated Successfully',
+      message: `Your ${plan.name} plan is now active. You have unlocked your tier's daily tasks (₦${(plan.dailyTaskReward || 400).toLocaleString('en-NG')}/day)!`,
       type: 'investment',
       read: false,
       createdAt: now.toISOString()
     });
 
-    return { success: true, message: `Successfully invested $${amount.toLocaleString()} into ${plan.name}!` };
+    return { success: true, message: `Successfully activated ${plan.name}! Your dedicated tasks are now unlocked.` };
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, 'investments');
+    return { success: false, message: 'Investment transaction failed.' };
   }
 }
 
@@ -906,22 +1056,62 @@ export async function submitDepositRequest(
   }
 }
 
-// Submit simulated withdrawal request
+// Submit simulated withdrawal request with strict Nigeria Time (WAT) schedule validation
+// Enforces separate balances: Main Balance is NEVER withdrawable.
+// Task Balance is withdrawable ONLY on 30th of month (4:50 PM - 6:20 PM WAT).
+// Affiliate Balance is withdrawable ONLY daily (7:30 PM - 8:40 PM WAT).
 export async function submitWithdrawalRequest(
   user: UserProfile,
   amount: number,
   currency: string,
   network: string,
-  walletAddress: string
+  walletAddress: string,
+  balanceSource: 'task' | 'affiliate' = 'task'
 ): Promise<{ success: boolean; message: string }> {
   if (amount <= 0) {
-    return { success: false, message: 'Withdrawal amount must be greater than $0.' };
+    return { success: false, message: 'Withdrawal amount must be greater than ₦0.' };
   }
-  if (amount > user.balance) {
-    return { success: false, message: `Insufficient balance. Available: $${user.balance.toFixed(2)}` };
+
+  // 1. Verify schedule using trusted WAT server time
+  if (balanceSource === 'task') {
+    const taskStatus = getTaskWithdrawalStatus();
+    if (!taskStatus.isOpen) {
+      return {
+        success: false,
+        message: `Task Balance withdrawal is CLOSED. Available only on the 30th day of each month (4:50 PM – 6:20 PM WAT). ${taskStatus.nextWindowText}.`
+      };
+    }
+    const currentTaskBal = user.taskBalance || 0;
+    if (amount > currentTaskBal) {
+      return {
+        success: false,
+        message: `Insufficient Task Balance (Available: ₦${currentTaskBal.toLocaleString('en-NG')}).`
+      };
+    }
+  } else if (balanceSource === 'affiliate') {
+    const affStatus = getAffiliateWithdrawalStatus();
+    if (!affStatus.isOpen) {
+      return {
+        success: false,
+        message: `Affiliate Balance withdrawal is CLOSED. Available daily between 7:30 PM and 8:40 PM WAT. ${affStatus.nextWindowText}.`
+      };
+    }
+    const currentAffBal = user.affiliateBalance || 0;
+    if (amount > currentAffBal) {
+      return {
+        success: false,
+        message: `Insufficient Affiliate Balance (Available: ₦${currentAffBal.toLocaleString('en-NG')}).`
+      };
+    }
+  } else {
+    return {
+      success: false,
+      message: 'Invalid balance source. Main Balance is reserved exclusively for purchasing investment plans and cannot be withdrawn.'
+    };
   }
-  if (!walletAddress || walletAddress.trim().length < 12) {
-    return { success: false, message: 'Please specify a valid destination wallet address.' };
+
+  if (!walletAddress || walletAddress.trim().length < 8) {
+    return { success: false, message: 'Please specify a valid Nigerian bank account number and bank name.' };
   }
 
   const requestId = `wth_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -936,6 +1126,7 @@ export async function submitWithdrawalRequest(
     currency,
     network,
     walletAddress,
+    balanceSource,
     status: 'pending',
     createdAt: now,
     updatedAt: now
@@ -952,24 +1143,35 @@ export async function submitWithdrawalRequest(
     currency,
     status: 'pending',
     reference: `WTH-${requestId.slice(-6).toUpperCase()}`,
-    note: `Simulated Payout to ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)} (${network})`,
+    note: `Simulated ${balanceSource === 'task' ? 'Task' : 'Affiliate'} Payout to ${walletAddress}`,
     destinationAddress: walletAddress,
     createdAt: now
   };
 
   try {
-    // Deduct balance upfront during pending phase to avoid double-spend
     await runTransaction(db, async (t) => {
       const userRef = doc(db, 'users', user.uid);
       const userSnap = await t.get(userRef);
-      if (!userSnap.exists()) throw new Error('User not found');
+      if (!userSnap.exists()) throw new Error('User record not found');
       const data = userSnap.data() as UserProfile;
-      if (data.balance < amount) throw new Error('Insufficient balance');
 
-      t.update(userRef, {
-        balance: data.balance - amount,
-        updatedAt: now
-      });
+      if (balanceSource === 'task') {
+        const available = data.taskBalance || 0;
+        if (available < amount) throw new Error('Insufficient Task Balance');
+        t.update(userRef, {
+          taskBalance: available - amount,
+          totalWithdrawn: (data.totalWithdrawn || 0) + amount,
+          updatedAt: now
+        });
+      } else {
+        const available = data.affiliateBalance || 0;
+        if (available < amount) throw new Error('Insufficient Affiliate Balance');
+        t.update(userRef, {
+          affiliateBalance: available - amount,
+          totalWithdrawn: (data.totalWithdrawn || 0) + amount,
+          updatedAt: now
+        });
+      }
 
       t.set(doc(db, 'withdrawalRequests', requestId), withdrawalReq);
       t.set(doc(db, 'transactions', transactionId), newTx);
@@ -979,15 +1181,363 @@ export async function submitWithdrawalRequest(
       id: `notif_${requestId}`,
       userId: user.uid,
       title: 'Withdrawal Scheduled',
-      message: `Simulated withdrawal request for $${amount.toLocaleString()} is queued for administrative dispatch.`,
+      message: `Simulated ${balanceSource === 'task' ? 'Task' : 'Affiliate'} withdrawal request for ₦${amount.toLocaleString('en-NG')} is queued for administrative dispatch.`,
       type: 'transaction',
       read: false,
       createdAt: now
     });
 
-    return { success: true, message: 'Withdrawal request registered! Funds have been escrowed pending admin approval.' };
-  } catch (error) {
+    return {
+      success: true,
+      message: `Simulated withdrawal request for ₦${amount.toLocaleString('en-NG')} registered successfully from your ${balanceSource === 'task' ? 'Task' : 'Affiliate'} Balance!`
+    };
+  } catch (error: any) {
     handleFirestoreError(error, OperationType.WRITE, 'withdrawalRequests');
+    return { success: false, message: error?.message || 'Withdrawal processing failed.' };
+  }
+}
+
+// ----------------- MONTHLY PLAN EXPIRATION & RENEWAL -----------------
+
+/**
+ * Checks all active investments for monthly 30th-day cycle expiration based on Nigeria Time (WAT).
+ * When 30th day arrives, eligible plans are marked as 'expired', tasks are locked,
+ * and a notification is dispatched.
+ */
+export async function checkAndExpireMonthlyPlans(
+  user: UserProfile,
+  investments: Investment[]
+): Promise<Investment[]> {
+  const updatedInvestments = [...investments];
+  let hasExpiredAny = false;
+  const now = new Date().toISOString();
+
+  for (let i = 0; i < updatedInvestments.length; i++) {
+    const inv = updatedInvestments[i];
+    if (inv.status === 'active' && isPlanEligibleForMonthlyExpiration(inv.startDate)) {
+      hasExpiredAny = true;
+      const expiredInv: Investment = {
+        ...inv,
+        status: 'expired',
+        expiredAt: now,
+        expirationReason: 'Monthly 30th-day cycle completed'
+      };
+      updatedInvestments[i] = expiredInv;
+
+      try {
+        await updateDoc(doc(db, 'investments', inv.id), {
+          status: 'expired',
+          expiredAt: now,
+          expirationReason: 'Monthly 30th-day cycle completed'
+        });
+
+        // Record expiration in transaction ledger
+        const txId = `tx_exp_${inv.id}_${Date.now()}`;
+        await setDoc(doc(db, 'transactions', txId), {
+          id: txId,
+          userId: user.uid,
+          userEmail: user.email || user.phoneNumber || '',
+          userName: user.displayName,
+          type: 'plan_expired',
+          amount: inv.amount,
+          currency: 'NGN',
+          status: 'completed',
+          reference: `EXP-${inv.id.slice(-6).toUpperCase()}`,
+          note: `Plan Expired on 30th-day monthly cycle: ${inv.planName}. Tasks locked pending renewal.`,
+          createdAt: now
+        });
+
+        // Notify user
+        await setDoc(doc(db, 'notifications', `notif_exp_${inv.id}`), {
+          id: `notif_exp_${inv.id}`,
+          userId: user.uid,
+          title: 'Plan Expired — Renewal Available',
+          message: `Your ${inv.planName} has reached its monthly 30th-day expiration. Daily tasks are locked. Click "Renew Plan" to reactivate.`,
+          type: 'investment',
+          read: false,
+          createdAt: now
+        });
+      } catch (err) {
+        console.warn('Failed to update expired investment doc:', err);
+      }
+    }
+  }
+
+  if (hasExpiredAny) {
+    const hasActiveRemaining = updatedInvestments.some((inv) => inv.status === 'active');
+    if (!hasActiveRemaining) {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), {
+          activePlanTier: null,
+          updatedAt: now
+        });
+      } catch (err) {
+        console.warn('Failed to reset user activePlanTier:', err);
+      }
+    }
+  }
+
+  return updatedInvestments;
+}
+
+/**
+ * Renew an expired plan:
+ * Checks Main Balance for required capital, creates a new active investment,
+ * marks the expired one as 'renewed', and unlocks daily tasks for the user.
+ */
+export async function renewInvestmentPlan(
+  user: UserProfile,
+  expiredInvestment: Investment,
+  plan: InvestmentPlan
+): Promise<{ success: boolean; message: string }> {
+  const capital = plan.simulatedCapital || expiredInvestment.amount;
+  if ((user.balance || 0) < capital) {
+    return {
+      success: false,
+      message: `Insufficient Main Balance to renew ${plan.name} (Required: ₦${capital.toLocaleString('en-NG')}, Available: ₦${(user.balance || 0).toLocaleString('en-NG')}). Please fund your wallet first.`
+    };
+  }
+
+  const newInvId = `inv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const now = new Date();
+  const endDate = new Date(now.getTime() + (plan.durationDays || 30) * 86400000);
+
+  const newInvestment: Investment = {
+    id: newInvId,
+    userId: user.uid,
+    userEmail: user.email || user.phoneNumber || '',
+    userName: user.displayName,
+    planId: plan.id,
+    planName: plan.name,
+    tierKey: plan.tierKey || 'tier_1',
+    amount: capital,
+    dailyRoi: plan.dailyRoi,
+    dailyTaskReward: plan.dailyTaskReward || 400,
+    totalRoiExpected: (capital * plan.dailyRoi * (plan.durationDays || 30)) / 100,
+    projectedValue: plan.projectedValue || 12000,
+    durationDays: plan.durationDays || 30,
+    startDate: now.toISOString(),
+    endDate: endDate.toISOString(),
+    daysElapsed: 0,
+    totalEarned: 0,
+    status: 'active',
+    lastProfitClaimDate: now.toISOString(),
+    lastTaskClaimTimestamp: 0,
+    createdAt: now.toISOString()
+  };
+
+  const txId = `tx_ren_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const renewTx: Transaction = {
+    id: txId,
+    userId: user.uid,
+    userEmail: user.email || user.phoneNumber || '',
+    userName: user.displayName,
+    type: 'plan_renewed',
+    amount: capital,
+    currency: 'NGN',
+    status: 'completed',
+    reference: `REN-${newInvId.slice(-6).toUpperCase()}`,
+    note: `Renewed ${plan.name} Plan (Capital: ₦${capital.toLocaleString('en-NG')}, Tasks Unlocked)`,
+    createdAt: now.toISOString()
+  };
+
+  try {
+    await runTransaction(db, async (t) => {
+      const userRef = doc(db, 'users', user.uid);
+      const userSnap = await t.get(userRef);
+      if (!userSnap.exists()) throw new Error('User not found');
+      const uData = userSnap.data() as UserProfile;
+      if (uData.balance < capital) throw new Error('Insufficient Main Balance');
+
+      t.update(userRef, {
+        balance: uData.balance - capital,
+        totalInvested: (uData.totalInvested || 0) + capital,
+        activePlanTier: plan.tierKey,
+        activeInvestmentId: newInvId,
+        updatedAt: now.toISOString()
+      });
+
+      // Mark expired plan as renewed
+      t.update(doc(db, 'investments', expiredInvestment.id), {
+        status: 'completed',
+        renewedAt: now.toISOString()
+      });
+
+      t.set(doc(db, 'investments', newInvId), newInvestment);
+      t.set(doc(db, 'transactions', txId), renewTx);
+    });
+
+    // Notify user
+    await setDoc(doc(db, 'notifications', `notif_ren_${newInvId}`), {
+      id: `notif_ren_${newInvId}`,
+      userId: user.uid,
+      title: 'Plan Renewed Successfully',
+      message: `Your ${plan.name} has been renewed! Daily tasks have been unlocked for the new 30-day monthly cycle.`,
+      type: 'investment',
+      read: false,
+      createdAt: now.toISOString()
+    });
+
+    return {
+      success: true,
+      message: `Successfully renewed ${plan.name}! Your tier's daily tasks are unlocked.`
+    };
+  } catch (err: any) {
+    handleFirestoreError(err, OperationType.WRITE, 'investments');
+    return { success: false, message: err?.message || 'Plan renewal failed.' };
+  }
+}
+
+// ----------------- PLAN-SPECIFIC TASKS & REWARDS -----------------
+
+/**
+ * Claim daily reward for a specific plan tier.
+ * Strictly verifies that:
+ * 1. User has an ACTIVE (not expired) investment in that specific tier.
+ * 2. 24 hours have elapsed since the last claim.
+ * 3. Prevents claiming across other plan tiers or duplicate claims within the same 24h window.
+ */
+export async function claimPlanSpecificDailyTask(
+  user: UserProfile,
+  planTierKey: string,
+  activeInvestment: Investment
+): Promise<{ success: boolean; message: string }> {
+  const planTask = PLAN_TIER_TASKS[planTierKey];
+  if (!planTask) {
+    return { success: false, message: 'Invalid plan task tier.' };
+  }
+
+  // 1. Check investment tier match
+  if (activeInvestment.tierKey !== planTierKey) {
+    return {
+      success: false,
+      message: `Access denied. You can only perform tasks belonging to your active ${activeInvestment.planName} plan.`
+    };
+  }
+
+  // 2. Check if plan is expired
+  if (activeInvestment.status !== 'active') {
+    return {
+      success: false,
+      message: 'This plan is expired or inactive. Please renew your plan to unlock daily tasks.'
+    };
+  }
+
+  // 3. Check 24-hour reset interval using trusted server timestamp
+  const nowMs = getTrustedTimestamp();
+  const lastClaimMs = activeInvestment.lastTaskClaimTimestamp || 0;
+  const timeSinceLastClaimMs = nowMs - lastClaimMs;
+  const resetIntervalMs = 24 * 60 * 60 * 1000;
+
+  if (lastClaimMs > 0 && timeSinceLastClaimMs < resetIntervalMs) {
+    const remainingMs = resetIntervalMs - timeSinceLastClaimMs;
+    const remainingHours = Math.floor(remainingMs / (3600 * 1000));
+    const remainingMins = Math.floor((remainingMs % (3600 * 1000)) / (60 * 1000));
+    return {
+      success: false,
+      message: `Task reward already claimed for this 24-hour cycle. Resets in ${remainingHours}h ${remainingMins}m.`
+    };
+  }
+
+  const reward = planTask.dailyRewardNaira;
+  const txId = `tx_task_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const nowIso = new Date().toISOString();
+
+  const taskTx: Transaction = {
+    id: txId,
+    userId: user.uid,
+    userEmail: user.email || user.phoneNumber || '',
+    userName: user.displayName,
+    type: 'task_reward',
+    amount: reward,
+    currency: 'NGN',
+    status: 'completed',
+    reference: `TASK-${planTierKey.toUpperCase()}-${Date.now().toString().slice(-4)}`,
+    note: `Daily Task Reward for ${planTask.tierName} (${planTask.title})`,
+    createdAt: nowIso
+  };
+
+  try {
+    await runTransaction(db, async (t) => {
+      const userRef = doc(db, 'users', user.uid);
+      const invRef = doc(db, 'investments', activeInvestment.id);
+
+      const userSnap = await t.get(userRef);
+      if (!userSnap.exists()) throw new Error('User not found');
+      const uData = userSnap.data() as UserProfile;
+
+      const invSnap = await t.get(invRef);
+      if (!invSnap.exists()) throw new Error('Investment not found');
+      const invData = invSnap.data() as Investment;
+
+      if (invData.status !== 'active') {
+        throw new Error('Plan is no longer active');
+      }
+
+      // Update Task Balance exclusively (never Main Balance)
+      t.update(userRef, {
+        taskBalance: (uData.taskBalance || 0) + reward,
+        lastTaskClaimTimestamp: nowMs,
+        updatedAt: nowIso
+      });
+
+      t.update(invRef, {
+        lastTaskClaimTimestamp: nowMs,
+        totalEarned: (invData.totalEarned || 0) + reward
+      });
+
+      t.set(doc(db, 'transactions', txId), taskTx);
+    });
+
+    return {
+      success: true,
+      message: `₦${reward.toLocaleString('en-NG')} successfully claimed and credited to your Task Balance! (24-hour reset timer started)`
+    };
+  } catch (err: any) {
+    handleFirestoreError(err, OperationType.WRITE, 'users');
+    return { success: false, message: err?.message || 'Failed to claim task reward.' };
+  }
+}
+
+// ----------------- PROFILE PICTURE ONLINE STORAGE -----------------
+
+/**
+ * Save user profile picture securely in Firestore online profile.
+ * Restricts each user to editing only their own profile.
+ */
+export async function updateUserProfilePicture(
+  uid: string,
+  photoURL: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const userRef = doc(db, 'users', uid);
+    await updateDoc(userRef, {
+      photoURL,
+      updatedAt: new Date().toISOString()
+    });
+    return { success: true, message: 'Profile picture updated successfully!' };
+  } catch (err: any) {
+    handleFirestoreError(err, OperationType.UPDATE, `users/${uid}`);
+    return { success: false, message: 'Failed to update profile picture.' };
+  }
+}
+
+/**
+ * Remove user profile picture from online profile.
+ */
+export async function removeUserProfilePicture(
+  uid: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const userRef = doc(db, 'users', uid);
+    await updateDoc(userRef, {
+      photoURL: '',
+      updatedAt: new Date().toISOString()
+    });
+    return { success: true, message: 'Profile picture removed.' };
+  } catch (err: any) {
+    handleFirestoreError(err, OperationType.UPDATE, `users/${uid}`);
+    return { success: false, message: 'Failed to remove profile picture.' };
   }
 }
 
@@ -1497,3 +2047,110 @@ export async function getPromoCodeUsages(): Promise<PromoCodeUsage[]> {
     return [];
   }
 }
+
+// ----------------- DAILY TASKS & REWARDS -----------------
+
+export async function claimDailyTask(
+  user: UserProfile,
+  task: DailyTask
+): Promise<{ success: boolean; message: string }> {
+  const currentCompleted = user.completedTaskIds || [];
+  if (currentCompleted.includes(task.id)) {
+    return { success: false, message: `You have already claimed today's reward for "${task.title}".` };
+  }
+
+  const now = new Date().toISOString();
+  const reward = task.rewardNaira;
+  const currentTaskBalance = user.taskBalance || 0;
+  const newTaskBalance = currentTaskBalance + reward;
+  const updatedCompleted = [...currentCompleted, task.id];
+
+  const txId = `tx_task_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const tx: Transaction = {
+    id: txId,
+    userId: user.uid,
+    userEmail: user.email || '',
+    userName: user.displayName,
+    type: 'task_reward' as any,
+    amount: reward,
+    currency: 'NGN',
+    status: 'completed',
+    reference: `TASK-${task.id.toUpperCase()}-${Date.now().toString().slice(-4)}`,
+    note: `Daily Task Reward: ${task.title}`,
+    createdAt: now
+  };
+
+  try {
+    const userRef = doc(db, 'users', user.uid);
+    await updateDoc(userRef, {
+      taskBalance: newTaskBalance,
+      completedTaskIds: updatedCompleted,
+      updatedAt: now
+    });
+
+    await setDoc(doc(db, 'transactions', txId), tx);
+
+    return {
+      success: true,
+      message: `₦${reward.toLocaleString('en-NG')} successfully credited to your Task Balance!`
+    };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+    return { success: false, message: 'Failed to record task reward.' };
+  }
+}
+
+export async function transferTaskBalanceToMain(
+  user: UserProfile,
+  amount: number
+): Promise<{ success: boolean; message: string }> {
+  const currentTaskBal = user.taskBalance || 0;
+  if (amount <= 0) {
+    return { success: false, message: 'Transfer amount must be greater than zero.' };
+  }
+  if (amount > currentTaskBal) {
+    return {
+      success: false,
+      message: `Insufficient Task Balance (Available: ₦${currentTaskBal.toLocaleString('en-NG')}).`
+    };
+  }
+
+  const now = new Date().toISOString();
+  const newMainBal = (user.balance || 0) + amount;
+  const newTaskBal = currentTaskBal - amount;
+
+  const txId = `tx_transfer_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const tx: Transaction = {
+    id: txId,
+    userId: user.uid,
+    userEmail: user.email || '',
+    userName: user.displayName,
+    type: 'admin_adjustment',
+    amount: amount,
+    currency: 'NGN',
+    status: 'completed',
+    reference: `TRF-${Date.now().toString().slice(-6)}`,
+    note: `Transfer from Task Balance into Main Liquid Wallet`,
+    createdAt: now
+  };
+
+  try {
+    const userRef = doc(db, 'users', user.uid);
+    await updateDoc(userRef, {
+      balance: newMainBal,
+      taskBalance: newTaskBal,
+      updatedAt: now
+    });
+
+    await setDoc(doc(db, 'transactions', txId), tx);
+
+    return {
+      success: true,
+      message: `Successfully transferred ₦${amount.toLocaleString('en-NG')} to your Main Balance!`
+    };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+    return { success: false, message: 'Failed to transfer balance.' };
+  }
+}
+

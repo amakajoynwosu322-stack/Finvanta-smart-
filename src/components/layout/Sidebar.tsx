@@ -60,6 +60,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'DASHBOARD & ASSETS',
       items: [
         { id: 'overview', label: 'Overview Dashboard', icon: LayoutDashboard },
+        { id: 'tasks', label: 'Daily Tasks & Rewards', icon: Award, badge: 'EARN ₦' },
         { id: 'portfolio', label: 'Portfolio Overview', icon: PieChart },
         { id: 'available_balance', label: 'Available Balance', icon: Wallet },
       ]

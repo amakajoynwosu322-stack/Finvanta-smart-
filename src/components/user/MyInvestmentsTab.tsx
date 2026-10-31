@@ -1,19 +1,21 @@
 import React, { useState } from 'react';
 import {
+  AlertTriangle,
   Briefcase,
   Calendar,
   CheckCircle2,
   Clock,
-  DollarSign,
   ExternalLink,
   Flame,
   Percent,
+  RotateCcw,
   Sparkles,
   TrendingUp,
   Zap
 } from 'lucide-react';
 import { Investment, UserProfile } from '../../types';
-import { claimInvestmentProfit } from '../../services/db';
+import { claimInvestmentProfit, renewInvestmentPlan } from '../../services/db';
+import { formatNaira } from '../../utils/currency';
 import confetti from 'canvas-confetti';
 
 interface MyInvestmentsTabProps {
@@ -29,8 +31,9 @@ export const MyInvestmentsTab: React.FC<MyInvestmentsTabProps> = ({
   onNavigateTab,
   onRefresh
 }) => {
-  const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('active');
+  const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'expired'>('active');
   const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [isRenewingId, setIsRenewingId] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const filtered = investments.filter((i) => {
@@ -66,6 +69,30 @@ export const MyInvestmentsTab: React.FC<MyInvestmentsTabProps> = ({
     }
   };
 
+  const handleRenew = async (inv: Investment) => {
+    try {
+      setIsRenewingId(inv.id);
+      const res = await renewInvestmentPlan(user, inv);
+      if (res.success) {
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+        setToastMsg(res.message);
+        setTimeout(() => setToastMsg(null), 4000);
+        onRefresh();
+      } else {
+        setToastMsg(res.message);
+        setTimeout(() => setToastMsg(null), 3000);
+      }
+    } catch (err: any) {
+      setToastMsg(err?.message || 'Error renewing plan');
+    } finally {
+      setIsRenewingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* Toast */}
@@ -84,10 +111,10 @@ export const MyInvestmentsTab: React.FC<MyInvestmentsTabProps> = ({
         <div>
           <h2 className="text-xl font-bold text-white tracking-wide flex items-center gap-2">
             <Briefcase className="w-5 h-5 text-[#B66DFF]" />
-            Active & Settled Investments
+            My Investment Plans & Subscriptions
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Monitor real-time duration elapsed, harvest daily yield payouts, and view completed contracts.
+            Track active 30-day contracts, view 30th-day monthly cycle expirations, and renew your plans in Nigerian Naira (₦).
           </p>
         </div>
 
@@ -95,51 +122,51 @@ export const MyInvestmentsTab: React.FC<MyInvestmentsTabProps> = ({
           onClick={() => onNavigateTab('investment_plans')}
           className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#7C3AED] hover:from-[#9d71fa] hover:to-[#8B5CF6] text-white text-xs font-semibold shadow-md self-start sm:self-auto"
         >
-          New Investment +
+          Subscribe to New Plan +
         </button>
       </div>
 
       {/* Metrics Row */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="glass-card rounded-3xl p-5">
-          <span className="text-xs font-mono uppercase text-slate-400">Active Capital Deployed</span>
-          <div className="text-2xl font-extrabold text-white mt-1">
-            ${totalActiveCapital.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+        <div className="p-5 rounded-3xl bg-[#171225] border border-[#8B5CF6]/25 shadow-md">
+          <span className="text-xs font-mono uppercase text-slate-400">Active Capital Allocated</span>
+          <div className="text-2xl font-extrabold text-white mt-1 tabular-nums font-mono">
+            {formatNaira(totalActiveCapital)}
           </div>
           <div className="text-[11px] text-slate-400 mt-2">
-            {activeInvestments.length} running algorithmic contracts
+            {activeInvestments.length} running savings contracts
           </div>
         </div>
 
-        <div className="glass-card rounded-3xl p-5">
-          <span className="text-xs font-mono uppercase text-slate-400">Total Harvested Profits</span>
-          <div className="text-2xl font-extrabold text-emerald-400 mt-1">
-            +${totalHarvestedProfits.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+        <div className="p-5 rounded-3xl bg-[#171225] border border-[#8B5CF6]/25 shadow-md">
+          <span className="text-xs font-mono uppercase text-slate-400">Total Harvested Task Returns</span>
+          <div className="text-2xl font-extrabold text-emerald-400 mt-1 tabular-nums font-mono">
+            +{formatNaira(totalHarvestedProfits)}
           </div>
           <div className="text-[11px] text-slate-400 mt-2">
-            Directly credited to liquid balance
+            Simulated educational yields
           </div>
         </div>
 
-        <div className="glass-card rounded-3xl p-5">
-          <span className="text-xs font-mono uppercase text-slate-400">Next Distribution Cycle</span>
+        <div className="p-5 rounded-3xl bg-[#171225] border border-[#8B5CF6]/25 shadow-md">
+          <span className="text-xs font-mono uppercase text-slate-400">Monthly Expiration Cycle</span>
           <div className="text-2xl font-extrabold text-[#B66DFF] mt-1 flex items-center gap-2">
             <Clock className="w-5 h-5" />
-            Every 24h
+            30th of Month
           </div>
-          <div className="text-[11px] text-emerald-400 font-semibold mt-2">
-            Automatic & manual claim supported
+          <div className="text-[11px] text-slate-400 mt-2">
+            Nigeria WAT (UTC+1) Server Clock
           </div>
         </div>
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
-        {(['active', 'completed', 'all'] as const).map((tab) => (
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto">
+        {(['active', 'expired', 'completed', 'all'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setFilter(tab)}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all ${
+            className={`px-4 py-2 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all shrink-0 ${
               filter === tab
                 ? 'bg-[#8B5CF6]/20 border border-[#8B5CF6]/50 text-white shadow-sm'
                 : 'text-slate-400 hover:text-white'
@@ -156,40 +183,47 @@ export const MyInvestmentsTab: React.FC<MyInvestmentsTabProps> = ({
           <Briefcase className="w-12 h-12 text-slate-600 mx-auto mb-3" />
           <h4 className="text-base font-bold text-white">No {filter} contracts found</h4>
           <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-            Ready to participate in algorithmic yield strategies? Choose from our curated investment packages.
+            Ready to participate in FINVANTA educational packages? Choose from our 5 investment tiers.
           </p>
           <button
             onClick={() => onNavigateTab('investment_plans')}
             className="mt-5 px-5 py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#B66DFF] text-white text-xs font-bold transition-all shadow-md"
           >
-            Browse Investment Plans
+            Browse 5 Investment Plans
           </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filtered.map((inv) => {
-            const progress = Math.min(100, Math.round(((inv.daysElapsed || 0) / inv.durationDays) * 100));
+            const progress = Math.min(100, Math.round(((inv.daysElapsed || 0) / (inv.durationDays || 30)) * 100));
             const isCompleted = inv.status === 'completed';
-            const expectedDaily = (inv.amount * inv.dailyRoi) / 100;
+            const isExpired = inv.status === 'expired';
+            const isActive = inv.status === 'active';
 
             return (
               <div
                 key={inv.id}
-                className="glass-card rounded-3xl p-5 border-[#8B5CF6]/20 hover:border-[#8B5CF6]/50 transition-all flex flex-col justify-between group"
+                className={`rounded-3xl p-5 border transition-all flex flex-col justify-between group shadow-lg ${
+                  isExpired
+                    ? 'bg-[#1b121c] border-amber-500/35'
+                    : 'bg-[#171225] border-[#8B5CF6]/25 hover:border-[#8B5CF6]/50'
+                }`}
               >
                 <div>
                   <div className="flex items-center justify-between text-xs mb-3">
                     <span className="text-[10px] font-mono text-[#B66DFF] font-bold px-2 py-0.5 rounded bg-[#8B5CF6]/20">
-                      ID: {inv.id.slice(-6).toUpperCase()}
+                      REF: {inv.id.slice(-6).toUpperCase()}
                     </span>
                     <span
                       className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                        isCompleted
+                        isExpired
+                          ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                          : isCompleted
                           ? 'bg-slate-700/50 text-slate-300'
                           : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
                       }`}
                     >
-                      {isCompleted ? 'Matured & Settled' : 'Accruing Yield'}
+                      {isExpired ? 'Cycle Expired (30th Day)' : isCompleted ? 'Completed' : 'Active & Accruing'}
                     </span>
                   </div>
 
@@ -197,27 +231,27 @@ export const MyInvestmentsTab: React.FC<MyInvestmentsTabProps> = ({
 
                   <div className="mt-4 grid grid-cols-2 gap-3 p-3 rounded-2xl bg-[#090711]/60 border border-slate-800 text-xs">
                     <div>
-                      <span className="text-[10px] text-slate-400 uppercase font-mono">Principal</span>
-                      <div className="font-extrabold text-white font-mono text-sm">
-                        ${inv.amount.toLocaleString()}
+                      <span className="text-[10px] text-slate-400 uppercase font-mono">Simulated Capital</span>
+                      <div className="font-extrabold text-white font-mono text-xs sm:text-sm tabular-nums">
+                        {formatNaira(inv.amount)}
                       </div>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-400 uppercase font-mono">Daily Yield</span>
-                      <div className="font-extrabold text-emerald-400 font-mono text-sm">
-                        +${expectedDaily.toFixed(2)} ({inv.dailyRoi}%)
+                      <span className="text-[10px] text-slate-400 uppercase font-mono">Daily Task Reward</span>
+                      <div className="font-extrabold text-emerald-400 font-mono text-xs sm:text-sm tabular-nums">
+                        +{formatNaira(inv.dailyRoi || 400, false)}
                       </div>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-400 uppercase font-mono">Harvested</span>
-                      <div className="font-bold text-amber-300 font-mono">
-                        +${(inv.totalEarned || 0).toFixed(2)}
+                      <span className="text-[10px] text-slate-400 uppercase font-mono">Total Earned</span>
+                      <div className="font-bold text-amber-300 font-mono text-xs sm:text-sm tabular-nums">
+                        +{formatNaira(inv.totalEarned || 0)}
                       </div>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-400 uppercase font-mono">Max Payout</span>
-                      <div className="font-bold text-slate-300 font-mono">
-                        +${(inv.totalRoiExpected || 0).toFixed(2)}
+                      <span className="text-[10px] text-slate-400 uppercase font-mono">Projected Value</span>
+                      <div className="font-bold text-[#B66DFF] font-mono text-xs sm:text-sm tabular-nums">
+                        {formatNaira(inv.totalRoiExpected || (inv.amount * 4))}
                       </div>
                     </div>
                   </div>
@@ -230,7 +264,7 @@ export const MyInvestmentsTab: React.FC<MyInvestmentsTabProps> = ({
                         Duration
                       </span>
                       <span className="font-mono font-semibold text-white">
-                        {inv.daysElapsed || 0} / {inv.durationDays} Days ({progress}%)
+                        {inv.daysElapsed || 0} / {inv.durationDays || 30} Days ({progress}%)
                       </span>
                     </div>
                     <div className="w-full h-2 bg-[#090711] rounded-full overflow-hidden">
@@ -240,20 +274,36 @@ export const MyInvestmentsTab: React.FC<MyInvestmentsTabProps> = ({
                       />
                     </div>
                     <div className="flex justify-between text-[10px] text-slate-500 font-mono">
-                      <span>Started: {new Date(inv.startDate).toLocaleDateString()}</span>
-                      <span>Matures: {new Date(inv.endDate).toLocaleDateString()}</span>
+                      <span>Started: {new Date(inv.startDate).toLocaleDateString('en-NG')}</span>
+                      <span>Matures: {new Date(inv.endDate).toLocaleDateString('en-NG')}</span>
                     </div>
                   </div>
                 </div>
 
-                {!isCompleted && (
+                {isExpired && (
+                  <div className="mt-4 pt-3 border-t border-slate-800">
+                    <div className="flex items-center gap-2 text-[11px] text-amber-300/90 mb-3">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                      <span>Expired on 30th of the month. Renew to restore daily task rewards.</span>
+                    </div>
+                    <button
+                      onClick={() => handleRenew(inv)}
+                      disabled={isRenewingId === inv.id}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs transition-all flex items-center justify-center gap-2 active:scale-95 shadow-md disabled:opacity-50"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span>{isRenewingId === inv.id ? 'Renewing...' : 'Renew Plan Now'}</span>
+                    </button>
+                  </div>
+                )}
+
+                {isActive && (
                   <button
-                    onClick={() => handleHarvest(inv)}
-                    disabled={claimingId === inv.id}
-                    className="mt-5 w-full py-2.5 rounded-xl bg-gradient-to-r from-[#8B5CF6]/30 to-[#B66DFF]/20 hover:from-[#8B5CF6] hover:to-[#B66DFF] border border-[#8B5CF6]/50 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 shadow-md shadow-[#8B5CF6]/15"
+                    onClick={() => onNavigateTab('tasks')}
+                    className="mt-5 w-full py-2.5 rounded-xl bg-gradient-to-r from-[#8B5CF6]/30 to-[#B66DFF]/20 hover:from-[#8B5CF6] hover:to-[#B66DFF] border border-[#8B5CF6]/50 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95 shadow-md shadow-[#8B5CF6]/15"
                   >
-                    <Zap className="w-4 h-4 text-amber-400" />
-                    {claimingId === inv.id ? 'Processing Harvest...' : 'Harvest Accrued Yield'}
+                    <Zap className="w-4 h-4 text-emerald-400" />
+                    <span>Go to Plan Tasks</span>
                   </button>
                 )}
               </div>

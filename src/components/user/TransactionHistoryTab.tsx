@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   ArrowDownCircle,
   ArrowUpCircle,
+  Award,
   Briefcase,
   Calendar,
   CheckCircle,
@@ -15,6 +16,7 @@ import {
   Zap
 } from 'lucide-react';
 import { Transaction } from '../../types';
+import { formatNaira } from '../../utils/currency';
 
 interface TransactionHistoryTabProps {
   transactions: Transaction[];
@@ -51,26 +53,27 @@ export const TransactionHistoryTab: React.FC<TransactionHistoryTabProps> = ({ tr
             Audit Ledger & Transaction History
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Complete cryptographic audit log of all deposits, withdrawals, yield harvests, and allocations.
+            Complete audit ledger of all deposits, withdrawals, yield payouts, task rewards, and plan allocations in Nigerian Naira (₦).
           </p>
         </div>
 
-        <span className="text-xs font-mono text-slate-400 self-start sm:self-auto px-3 py-1.5 rounded-xl bg-[#171225] border border-slate-800">
+        <span className="text-xs font-mono text-slate-300 self-start sm:self-auto px-3.5 py-1.5 rounded-xl bg-[#171225] border border-[#8B5CF6]/30">
           Total Records: {transactions.length}
         </span>
       </div>
 
       {/* Search and Filters Bar */}
-      <div className="glass-card rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="p-4 rounded-2xl bg-[#171225] border border-[#8B5CF6]/25 flex flex-col md:flex-row md:items-center justify-between gap-4">
         {/* Type Filter Buttons */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
           {[
-            { id: 'all', label: 'All' },
+            { id: 'all', label: 'All Records' },
             { id: 'deposit', label: 'Deposits' },
             { id: 'withdrawal', label: 'Withdrawals' },
             { id: 'roi_payout', label: 'Yield Payouts' },
-            { id: 'investment', label: 'Allocations' },
-            { id: 'referral_bonus', label: 'Referrals' },
+            { id: 'task_reward', label: 'Task Rewards' },
+            { id: 'investment', label: 'Subscriptions' },
+            { id: 'referral_bonus', label: 'Affiliates' },
           ].map((item) => (
             <button
               key={item.id}
@@ -100,7 +103,7 @@ export const TransactionHistoryTab: React.FC<TransactionHistoryTabProps> = ({ tr
       </div>
 
       {/* Transactions Table */}
-      <div className="glass-card rounded-3xl overflow-hidden">
+      <div className="rounded-3xl bg-[#171225] border border-[#8B5CF6]/25 overflow-hidden shadow-lg">
         {filtered.length === 0 ? (
           <div className="text-center py-16 px-4">
             <History className="w-10 h-10 text-slate-600 mx-auto mb-2" />
@@ -112,25 +115,31 @@ export const TransactionHistoryTab: React.FC<TransactionHistoryTabProps> = ({ tr
             <table className="w-full text-left text-xs">
               <thead className="bg-[#090711]/80 border-b border-slate-800 text-slate-400 uppercase font-mono text-[10px]">
                 <tr>
-                  <th className="py-3 px-4">Transaction / ID</th>
-                  <th className="py-3 px-4">Type</th>
-                  <th className="py-3 px-4">Amount</th>
+                  <th className="py-3 px-4">Reference / Description</th>
+                  <th className="py-3 px-4">Category</th>
+                  <th className="py-3 px-4">Amount (NGN)</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Timestamp</th>
-                  <th className="py-3 px-4 text-right">Receipt</th>
+                  <th className="py-3 px-4 text-right">Details</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {filtered.map((tx) => {
-                  const isNegative = tx.type === 'withdrawal' || (tx.type === 'investment' && tx.amount > 0);
+                  const isCredit =
+                    tx.type === 'deposit' ||
+                    tx.type === 'roi_payout' ||
+                    tx.type === 'referral_bonus' ||
+                    (tx.type as any) === 'task_reward' ||
+                    (tx.type === 'admin_adjustment' && tx.note?.includes('Transfer from Task'));
+
                   return (
                     <tr key={tx.id} className="hover:bg-[#8B5CF6]/5 transition-colors">
                       <td className="py-3.5 px-4">
                         <div className="font-semibold text-white font-mono text-xs">
                           {tx.reference || tx.id.slice(-8).toUpperCase()}
                         </div>
-                        <div className="text-[11px] text-slate-400 truncate max-w-[200px]">
-                          {tx.note || tx.paymentMethod || 'Quantitative transaction'}
+                        <div className="text-[11px] text-slate-400 truncate max-w-[220px]">
+                          {tx.note || tx.paymentMethod || 'Financial Transaction'}
                         </div>
                       </td>
 
@@ -139,6 +148,7 @@ export const TransactionHistoryTab: React.FC<TransactionHistoryTabProps> = ({ tr
                           {tx.type === 'deposit' && <ArrowDownCircle className="w-3.5 h-3.5 text-emerald-400" />}
                           {tx.type === 'withdrawal' && <ArrowUpCircle className="w-3.5 h-3.5 text-amber-400" />}
                           {tx.type === 'roi_payout' && <Zap className="w-3.5 h-3.5 text-[#B66DFF]" />}
+                          {(tx.type as any) === 'task_reward' && <Award className="w-3.5 h-3.5 text-amber-300" />}
                           {tx.type === 'investment' && <Briefcase className="w-3.5 h-3.5 text-purple-400" />}
                           {tx.type.replace('_', ' ')}
                         </span>
@@ -146,21 +156,17 @@ export const TransactionHistoryTab: React.FC<TransactionHistoryTabProps> = ({ tr
 
                       <td className="py-3.5 px-4">
                         <div
-                          className={`font-mono font-bold text-xs ${
-                            tx.type === 'withdrawal'
-                              ? 'text-amber-400'
-                              : tx.type === 'deposit' || tx.type === 'roi_payout'
-                              ? 'text-emerald-400'
-                              : 'text-white'
+                          className={`font-mono font-bold text-xs sm:text-sm tabular-nums ${
+                            isCredit ? 'text-emerald-400' : 'text-slate-200'
                           }`}
                         >
-                          {tx.type === 'withdrawal' ? '-' : '+'}${tx.amount.toLocaleString()} {tx.currency || 'USD'}
+                          {isCredit ? '+' : '-'}{formatNaira(tx.amount)}
                         </div>
                       </td>
 
                       <td className="py-3.5 px-4">
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase font-mono ${
                             tx.status === 'completed'
                               ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
                               : tx.status === 'pending'
@@ -173,7 +179,7 @@ export const TransactionHistoryTab: React.FC<TransactionHistoryTabProps> = ({ tr
                       </td>
 
                       <td className="py-3.5 px-4 text-slate-400 text-[11px]">
-                        <div>{new Date(tx.createdAt).toLocaleDateString()}</div>
+                        <div>{new Date(tx.createdAt).toLocaleDateString('en-NG')}</div>
                         <div className="text-[10px] text-slate-500 font-mono">
                           {new Date(tx.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </div>
@@ -182,9 +188,9 @@ export const TransactionHistoryTab: React.FC<TransactionHistoryTabProps> = ({ tr
                       <td className="py-3.5 px-4 text-right">
                         <button
                           onClick={() => setSelectedTx(tx)}
-                          className="px-2.5 py-1 rounded-lg bg-[#171225] hover:bg-[#8B5CF6]/20 border border-[#8B5CF6]/30 text-[#C4B5FD] hover:text-white text-[11px] font-medium transition-colors"
+                          className="px-2.5 py-1 rounded-lg bg-[#8B5CF6]/15 hover:bg-[#8B5CF6]/30 text-[#C4B5FD] hover:text-white transition-colors text-[11px] font-semibold"
                         >
-                          Audit Details
+                          View Receipt
                         </button>
                       </td>
                     </tr>
@@ -196,91 +202,77 @@ export const TransactionHistoryTab: React.FC<TransactionHistoryTabProps> = ({ tr
         )}
       </div>
 
-      {/* Transaction Receipt Modal */}
+      {/* Transaction Details Modal */}
       {selectedTx && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="relative w-full max-w-md bg-[#171225] border border-[#8B5CF6]/40 rounded-3xl p-6 shadow-2xl glow-purple">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-base font-bold text-white">Cryptographic Transaction Receipt</h3>
-              </div>
+          <div className="relative w-full max-w-md bg-[#171225] border border-[#8B5CF6]/40 rounded-3xl p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
+              <h3 className="text-base font-bold text-white">Transaction Receipt</h3>
               <button
                 onClick={() => setSelectedTx(null)}
-                className="text-slate-400 hover:text-white p-1 text-sm"
+                className="text-slate-400 hover:text-white text-sm p-1"
               >
                 ✕
               </button>
             </div>
 
-            <div className="py-4 space-y-3.5 text-xs">
-              <div className="p-3.5 rounded-2xl bg-[#090711] border border-slate-800 text-center">
-                <span className="text-[10px] text-slate-400 uppercase font-mono tracking-wider">Settled Amount</span>
-                <div className="text-2xl font-black text-white font-mono mt-1">
-                  ${selectedTx.amount.toLocaleString()} {selectedTx.currency || 'USD'}
-                </div>
-                <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold uppercase">
-                  Status: {selectedTx.status}
+            <div className="space-y-3 text-xs">
+              <div className="flex justify-between py-1 border-b border-slate-800/80">
+                <span className="text-slate-400">Transaction ID:</span>
+                <span className="font-mono text-white flex items-center gap-1">
+                  {selectedTx.id}
+                  <button onClick={() => handleCopy(selectedTx.id)} className="text-[#B66DFF] hover:text-white">
+                    <Copy className="w-3 h-3" />
+                  </button>
                 </span>
               </div>
 
-              <div className="space-y-2 text-slate-300">
-                <div className="flex justify-between items-center py-1 border-b border-slate-800/80">
-                  <span className="text-slate-400">Transaction ID:</span>
-                  <div className="flex items-center gap-1.5 font-mono text-white">
-                    <span>{selectedTx.id}</span>
-                    <button
-                      onClick={() => handleCopy(selectedTx.id)}
-                      className="text-slate-400 hover:text-[#B66DFF]"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
+              <div className="flex justify-between py-1 border-b border-slate-800/80">
+                <span className="text-slate-400">Reference:</span>
+                <span className="font-mono font-bold text-white">{selectedTx.reference || selectedTx.id}</span>
+              </div>
 
-                <div className="flex justify-between items-center py-1 border-b border-slate-800/80">
-                  <span className="text-slate-400">Reference:</span>
-                  <span className="font-mono text-white">{selectedTx.reference || 'N/A'}</span>
-                </div>
+              <div className="flex justify-between py-1 border-b border-slate-800/80">
+                <span className="text-slate-400">Category:</span>
+                <span className="text-white capitalize">{selectedTx.type.replace('_', ' ')}</span>
+              </div>
 
-                <div className="flex justify-between items-center py-1 border-b border-slate-800/80">
-                  <span className="text-slate-400">Category:</span>
-                  <span className="capitalize text-white font-medium">{selectedTx.type.replace('_', ' ')}</span>
-                </div>
+              <div className="flex justify-between py-1 border-b border-slate-800/80">
+                <span className="text-slate-400">Amount:</span>
+                <span className="text-emerald-400 font-bold font-mono text-sm tabular-nums">
+                  {formatNaira(selectedTx.amount)}
+                </span>
+              </div>
 
-                <div className="flex justify-between items-center py-1 border-b border-slate-800/80">
-                  <span className="text-slate-400">Note / Strategy:</span>
-                  <span className="text-white text-right max-w-[200px] truncate">{selectedTx.note || 'None'}</span>
-                </div>
+              <div className="flex justify-between py-1 border-b border-slate-800/80">
+                <span className="text-slate-400">Currency:</span>
+                <span className="text-white font-mono">Nigerian Naira (NGN / ₦)</span>
+              </div>
 
-                {selectedTx.destinationAddress && (
-                  <div className="flex justify-between items-center py-1 border-b border-slate-800/80">
-                    <span className="text-slate-400">Destination:</span>
-                    <span className="font-mono text-amber-400 truncate max-w-[180px]">
-                      {selectedTx.destinationAddress}
-                    </span>
-                  </div>
-                )}
+              <div className="flex justify-between py-1 border-b border-slate-800/80">
+                <span className="text-slate-400">Status:</span>
+                <span className="text-emerald-400 font-bold uppercase font-mono">{selectedTx.status}</span>
+              </div>
 
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-slate-400">Settlement Time:</span>
-                  <span className="text-white font-mono">{new Date(selectedTx.createdAt).toUTCString()}</span>
-                </div>
+              <div className="flex justify-between py-1 border-b border-slate-800/80">
+                <span className="text-slate-400">Description:</span>
+                <span className="text-white text-right max-w-[200px]">{selectedTx.note || 'None'}</span>
+              </div>
+
+              <div className="flex justify-between py-1">
+                <span className="text-slate-400">Timestamp:</span>
+                <span className="text-white font-mono">{new Date(selectedTx.createdAt).toLocaleString('en-NG')}</span>
               </div>
             </div>
 
-            {copiedHash && (
-              <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-300 text-center text-xs font-semibold">
-                Copied hash to clipboard!
-              </div>
-            )}
-
-            <button
-              onClick={() => setSelectedTx(null)}
-              className="mt-4 w-full py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#B66DFF] text-white text-xs font-bold transition-all"
-            >
-              Close Receipt
-            </button>
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setSelectedTx(null)}
+                className="w-full py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-bold transition-all"
+              >
+                Close Receipt
+              </button>
+            </div>
           </div>
         </div>
       )}

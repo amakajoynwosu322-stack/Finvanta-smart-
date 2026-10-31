@@ -64,7 +64,7 @@ export const SupportTab: React.FC<SupportTabProps> = ({ user, tickets, onRefresh
     },
     {
       q: 'Is my principal capital returned when the investment plan reaches maturity?',
-      a: 'Yes. All FINVANTA quantum and arbitrage strategies feature 100% Principal Capital Return. Upon contract expiration, your original deposit unlocks automatically into your liquid available balance.'
+      a: 'Yes. All FINVANTA sovereign wealth, treasury, and capital growth strategies feature 100% Principal Capital Return. Upon contract expiration, your original deposit unlocks automatically into your liquid available balance.'
     },
     {
       q: 'How does the simulated deposit and withdrawal gateway work?',

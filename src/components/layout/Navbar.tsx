@@ -75,33 +75,29 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               </div>
               <p className="text-[10px] text-slate-400 tracking-wider uppercase font-mono hidden sm:block">
-                Autonomous Yield Protocol
+                Nigerian Wealth & Savings Platform
               </p>
             </div>
           </div>
         </div>
 
-        {/* Live Market Bar & Backend Status Indicator */}
+        {/* Live Financial Platform Bar */}
         <div className="hidden xl:flex items-center gap-5 px-4 py-1.5 rounded-full bg-[#171225]/80 border border-[#8B5CF6]/15 text-xs text-slate-300 font-mono">
           <div className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-            <span className="text-slate-400 text-[11px]">QUANT POOL:</span>
-            <span className="text-emerald-400 font-semibold">$142.8M TVL</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-slate-400 text-[11px]">CURRENCY:</span>
+            <span className="text-emerald-400 font-semibold">Nigerian Naira (₦ / NGN)</span>
           </div>
           <div className="h-3 w-px bg-slate-700/60" />
           <div className="flex items-center gap-1.5">
-            <span className="text-slate-400 text-[11px]">BTC/USD:</span>
-            <span className="text-white font-medium">$98,420</span>
-            <span className="text-emerald-400 text-[10px]">+2.3%</span>
+            <span className="text-slate-400 text-[11px]">INSTANT SETTLEMENT:</span>
+            <span className="text-white font-medium">Active (Simulated NGN)</span>
           </div>
           <div className="h-3 w-px bg-slate-700/60" />
           <div className="flex items-center gap-1.5">
             <Database className="w-3.5 h-3.5 text-[#B66DFF]" />
-            <span className="text-slate-400 text-[11px]">BACKEND:</span>
-            <span className="text-[#B66DFF] font-semibold">Firebase Live</span>
-            <span className="text-[10px] text-slate-500 font-sans">
-              (Supabase Schema Prepared)
-            </span>
+            <span className="text-slate-400 text-[11px]">CENTRAL BACKEND:</span>
+            <span className="text-[#B66DFF] font-semibold">Supabase & Database Live</span>
           </div>
         </div>
 
@@ -163,10 +159,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
               <div className="text-right">
                 <div className="text-[10px] text-slate-400 uppercase font-mono tracking-wider">
-                  Available
+                  Main Balance
                 </div>
-                <div className="text-xs font-bold text-white group-hover:text-[#B66DFF] transition-colors">
-                  ${currentUser.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <div className="text-xs font-bold text-white group-hover:text-[#B66DFF] transition-colors tabular-nums">
+                  ₦{currentUser.balance.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </div>
             </div>

@@ -7,6 +7,17 @@ service cloud.firestore {
       return id is string && id.size() > 0 && id.size() <= 128;
     }
 
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'amakajoynwosu322@gmail.com' && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
     // Default deny all unknown collections
     match /{document=**} {
       allow read, write: if false;
@@ -113,6 +124,19 @@ service cloud.firestore {
     match /platformConfig/{configId} {
       allow read: if true;
       allow write: if true;
+    }
+
+    // Promotional Codes and VIP Vouchers Catalog
+    match /promoCodes/{codeId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Promotional Code Redemption Audit Trail
+    match /promoCodeUsages/{usageId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
     }
   }
 }

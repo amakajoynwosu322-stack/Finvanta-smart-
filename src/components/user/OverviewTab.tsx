@@ -1,24 +1,47 @@
 import React, { useState } from 'react';
 import {
   Activity,
+  AlertTriangle,
   ArrowDownCircle,
+  ArrowRight,
   ArrowUpCircle,
   ArrowUpRight,
+  Award,
+  Bell,
+  BookOpen,
   Briefcase,
   CheckCircle,
+  CheckCircle2,
+  ChevronRight,
   Clock,
+  Copy,
   ExternalLink,
   Flame,
+  HelpCircle,
+  History,
+  Info,
   Layers,
+  Lock,
   Megaphone,
+  Percent,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Share2,
+  Shield,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   TrendingUp,
+  User,
+  Users,
   Wallet,
   Zap
 } from 'lucide-react';
-import { Announcement, Investment, InvestmentPlan, Transaction, UserProfile } from '../../types';
-import { claimInvestmentProfit } from '../../services/db';
+import { Announcement, DailyTask, Investment, InvestmentPlan, Transaction, UserProfile } from '../../types';
+import { claimDailyTask, claimInvestmentProfit, DEFAULT_DAILY_TASKS, DEFAULT_PLANS, PLAN_TIER_TASKS, renewInvestmentPlan } from '../../services/db';
+import { formatNaira, formatNairaCompact } from '../../utils/currency';
+import { formatWatTime, getAffiliateWithdrawalStatus, getTaskWithdrawalStatus } from '../../utils/watTime';
 import confetti from 'canvas-confetti';
 
 interface OverviewTabProps {
@@ -40,16 +63,54 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   onNavigateTab,
   onRefresh
 }) => {
-  const [timeRange, setTimeRange] = useState<'7D' | '30D' | '90D' | '1Y'>('30D');
-  const [claimingId, setClaimingId] = useState<string | null>(null);
-  const [claimToast, setClaimToast] = useState<string | null>(null);
+  const [claimingInvId, setClaimingInvId] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [isRenewing, setIsRenewing] = useState(false);
 
-  const totalPortfolio = (user.balance || 0) + (user.totalInvested || 0);
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ text, type });
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
   const activeInvestments = investments.filter((i) => i.status === 'active');
+  const expiredInvestments = investments.filter((i) => i.status === 'expired');
+  const mainBalance = user.balance || 0;
+  const taskBalance = user.taskBalance || 0;
+  const affiliateBalance = user.affiliateBalance ?? (user.totalEarned ? user.totalEarned * 0.15 : 0);
 
+  // Active plan metadata
+  const activePlanMeta = DEFAULT_PLANS.find((p) => p.tierKey === user.activePlanTier);
+
+  // Time based Nigerian greeting
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
+
+  // 1-Click Copy Referral Link
+  const referralUrl = `https://finvanta.com/register?ref=${user.referralCode || 'FINVANTA'}`;
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(referralUrl);
+    setCopiedLink(true);
+    showToast('Referral link copied to clipboard!');
+    setTimeout(() => setCopiedLink(false), 2500);
+  };
+
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(user.referralCode || 'FINVANTA');
+    setCopiedCode(true);
+    showToast('Referral code copied!');
+    setTimeout(() => setCopiedCode(false), 2500);
+  };
+
+  // Claim Investment Yield
   const handleClaimYield = async (inv: Investment) => {
     try {
-      setClaimingId(inv.id);
+      setClaimingInvId(inv.id);
       const res = await claimInvestmentProfit(user, inv);
       if (res.success) {
         confetti({
@@ -57,536 +118,725 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           spread: 60,
           origin: { y: 0.7 }
         });
-        setClaimToast(res.message);
-        setTimeout(() => setClaimToast(null), 4000);
+        showToast(res.message);
         onRefresh();
       } else {
-        setClaimToast(res.message);
-        setTimeout(() => setClaimToast(null), 3000);
+        showToast(res.message, 'error');
       }
     } catch (err: any) {
-      setClaimToast(err?.message || 'Failed to claim yield');
+      showToast(err?.message || 'Failed to claim yield.', 'error');
     } finally {
-      setClaimingId(null);
+      setClaimingInvId(null);
     }
   };
 
-  // Mock chart coordinates based on timeRange
-  const chartPointsMap = {
-    '7D': [
-      { label: 'Mon', value: 35 },
-      { label: 'Tue', value: 42 },
-      { label: 'Wed', value: 48 },
-      { label: 'Thu', value: 54 },
-      { label: 'Fri', value: 68 },
-      { label: 'Sat', value: 76 },
-      { label: 'Sun', value: 92 },
-    ],
-    '30D': [
-      { label: 'W1', value: 20 },
-      { label: 'W2', value: 38 },
-      { label: 'W3', value: 62 },
-      { label: 'W4', value: 85 },
-      { label: 'Today', value: 100 },
-    ],
-    '90D': [
-      { label: 'M1', value: 15 },
-      { label: 'M2', value: 45 },
-      { label: 'M3', value: 90 },
-      { label: 'Now', value: 120 },
-    ],
-    '1Y': [
-      { label: 'Q1', value: 10 },
-      { label: 'Q2', value: 35 },
-      { label: 'Q3', value: 80 },
-      { label: 'Q4', value: 150 },
-    ]
+  const handleRenewPlan = async (inv: Investment) => {
+    try {
+      setIsRenewing(true);
+      const res = await renewInvestmentPlan(user, inv);
+      if (res.success) {
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+        showToast(res.message);
+        onRefresh();
+      } else {
+        showToast(res.message, 'error');
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to renew plan.', 'error');
+    } finally {
+      setIsRenewing(false);
+    }
   };
 
-  const points = chartPointsMap[timeRange];
-
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
-      {/* Toast Notification */}
-      {claimToast && (
-        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-[#8B5CF6]/30 to-[#B66DFF]/20 border border-[#8B5CF6]/50 text-white text-xs font-semibold flex items-center justify-between shadow-lg glow-purple-sm">
+    <div className="space-y-7 animate-in fade-in duration-200">
+      {/* Toast Feedback */}
+      {toastMessage && (
+        <div
+          className={`p-3.5 rounded-2xl border text-xs font-semibold flex items-center justify-between shadow-xl backdrop-blur-xl ${
+            toastMessage.type === 'success'
+              ? 'bg-[#171225]/95 border-[#8B5CF6]/50 text-white'
+              : 'bg-rose-950/90 border-rose-600/50 text-rose-200'
+          }`}
+        >
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-[#B66DFF]" />
-            <span>{claimToast}</span>
+            <span>{toastMessage.text}</span>
           </div>
-          <button onClick={() => setClaimToast(null)} className="text-slate-400 hover:text-white">✕</button>
-        </div>
-      )}
-
-      {/* Announcement Bar */}
-      {announcements.length > 0 && (
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#171225] via-[#23153d] to-[#171225] border border-[#8B5CF6]/30 p-3.5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-[#8B5CF6]/25 border border-[#8B5CF6]/40 flex items-center justify-center shrink-0 text-[#B66DFF]">
-              <Megaphone className="w-4 h-4 animate-bounce" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-white">{announcements[0].title}</span>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#8B5CF6]/30 text-[#C4B5FD] uppercase">
-                  {announcements[0].category.replace('_', ' ')}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-300 mt-0.5 line-clamp-1">{announcements[0].content}</p>
-            </div>
-          </div>
-          <button
-            onClick={() => onNavigateTab('notifications')}
-            className="shrink-0 text-xs text-[#B66DFF] hover:text-white font-medium flex items-center gap-1 transition-colors"
-          >
-            Details <ArrowUpRight className="w-3.5 h-3.5" />
+          <button onClick={() => setToastMessage(null)} className="text-slate-400 hover:text-white ml-3">
+            ✕
           </button>
         </div>
       )}
 
-      {/* Top Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Portfolio */}
-        <div className="glass-card glass-card-hover rounded-3xl p-5 relative overflow-hidden group">
-          <div className="flex items-center justify-between text-slate-400 mb-3">
-            <span className="text-xs font-semibold tracking-wide uppercase font-mono">Net Portfolio</span>
-            <div className="w-8 h-8 rounded-xl bg-[#8B5CF6]/20 flex items-center justify-center text-[#B66DFF]">
-              <Layers className="w-4 h-4" />
+      {/* Monthly Plan Expiration Notice (If user has an expired plan) */}
+      {expiredInvestments.length > 0 && (
+        <div className="p-5 rounded-3xl bg-amber-950/40 border-2 border-amber-500/60 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                Plan Cycle Expired on 30th of the Month
+              </h3>
+              <p className="text-xs text-amber-200/90 mt-0.5 leading-relaxed">
+                Your monthly plan completed its cycle on the 30th day. Renew your plan to unlock daily task rewards.
+              </p>
             </div>
           </div>
-          <div className="text-2xl lg:text-3xl font-extrabold text-white tracking-tight">
-            ${totalPortfolio.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+
+          <button
+            onClick={() => handleRenewPlan(expiredInvestments[0])}
+            disabled={isRenewing}
+            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs transition-all shadow-md active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 shrink-0"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>{isRenewing ? 'Renewing...' : 'Renew Plan'}</span>
+          </button>
+        </div>
+      )}
+
+      {/* 2. WELCOME GREETING AND USER NAME */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-3xl bg-gradient-to-r from-[#171225] via-[#1f1535] to-[#171225] border border-[#8B5CF6]/25 shadow-lg">
+        <div className="flex items-center gap-4">
+          <div
+            onClick={() => onNavigateTab('profile')}
+            className="relative cursor-pointer group"
+            title="Go to profile to update picture"
+          >
+            <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gradient-to-br from-[#8B5CF6] to-[#6D28D9] flex items-center justify-center text-white text-xl font-bold border-2 border-[#8B5CF6]/40 shadow-md group-hover:scale-105 transition-transform">
+              {user.photoURL ? (
+                <img
+                  src={user.photoURL}
+                  alt={user.displayName}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                user.displayName?.charAt(0)?.toUpperCase() || 'U'
+              )}
+            </div>
+            <span className="absolute -bottom-1 -right-1 text-xs">🇳🇬</span>
           </div>
-          <div className="mt-3 flex items-center gap-2 text-xs">
-            <span className="flex items-center text-emerald-400 font-semibold">
-              <TrendingUp className="w-3.5 h-3.5 mr-0.5" />
-              +18.4%
-            </span>
-            <span className="text-slate-400 text-[11px]">All-time simulated yield</span>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                {getGreeting()}, {user.firstName || user.displayName}!
+              </h2>
+              <span className="px-2 py-0.5 rounded-full bg-[#8B5CF6]/20 border border-[#8B5CF6]/40 text-[#C4B5FD] text-[11px] font-semibold">
+                {user.role === 'admin' ? 'Administrator' : user.educationalTier || 'Verified Investor'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-1 flex items-center gap-2 flex-wrap">
+              <span>{user.phoneNumber}</span>
+              <span className="text-slate-500">•</span>
+              <span className="text-emerald-400 flex items-center gap-1 font-medium">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                WAT Nigeria (UTC+1)
+              </span>
+              <span className="text-slate-500">•</span>
+              <span className="text-[#C4B5FD]">Ref: {user.referralCode}</span>
+            </p>
           </div>
-          <div className="absolute top-0 right-0 w-24 h-24 bg-[#8B5CF6]/10 rounded-full blur-2xl group-hover:bg-[#8B5CF6]/20 transition-all pointer-events-none" />
         </div>
 
-        {/* Liquid Balance */}
-        <div className="glass-card glass-card-hover rounded-3xl p-5 relative overflow-hidden group">
-          <div className="flex items-center justify-between text-slate-400 mb-3">
-            <span className="text-xs font-semibold tracking-wide uppercase font-mono">Available Liquid</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-              <Wallet className="w-4 h-4" />
+        <div className="flex items-center gap-2.5 self-start sm:self-center">
+          <button
+            onClick={() => onNavigateTab('deposit')}
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#7C3AED] hover:from-[#7C3AED] hover:to-[#6D28D9] text-white text-xs font-bold transition-all shadow-md active:scale-95 flex items-center gap-1.5"
+          >
+            <ArrowDownCircle className="w-4 h-4" />
+            <span>Fund Main Balance</span>
+          </button>
+          <button
+            onClick={() => onNavigateTab('withdrawal')}
+            className="px-4 py-2 rounded-xl bg-[#171225] hover:bg-[#251b3d] border border-[#8B5CF6]/30 hover:border-[#8B5CF6]/60 text-[#C4B5FD] hover:text-white text-xs font-semibold transition-all active:scale-95 flex items-center gap-1.5"
+          >
+            <ArrowUpCircle className="w-4 h-4" />
+            <span>Withdrawals</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 3. THREE SEPARATE SUMMARY CARDS: Main Balance, Task Balance, Affiliate Balance */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        {/* Card 1: Main Balance (PLANS EXCLUSIVE, NON-WITHDRAWABLE) */}
+        <div className="rounded-3xl p-6 bg-gradient-to-b from-[#1b1430] to-[#140e24] border border-[#8B5CF6]/40 relative overflow-hidden shadow-xl hover:border-[#8B5CF6]/70 transition-all group">
+          <div className="flex items-center justify-between mb-3 text-slate-300">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-[#8B5CF6]/20 flex items-center justify-center text-[#B66DFF]">
+                <Wallet className="w-4 h-4" />
+              </div>
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Main Balance</span>
             </div>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#8B5CF6]/20 text-[#C4B5FD] border border-[#8B5CF6]/30 font-semibold flex items-center gap-1">
+              <Lock className="w-3 h-3 text-amber-300" />
+              Plans Exclusive
+            </span>
           </div>
-          <div className="text-2xl lg:text-3xl font-extrabold text-white tracking-tight">
-            ${(user.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+
+          <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight tabular-nums mt-1 font-mono">
+            {formatNaira(mainBalance)}
           </div>
-          <div className="mt-3 flex items-center gap-2">
+          <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">
+            Used exclusively to purchase simulated investment plans. Non-withdrawable.
+          </p>
+
+          <div className="mt-4 pt-4 border-t border-[#8B5CF6]/20 flex items-center justify-between gap-2">
             <button
               onClick={() => onNavigateTab('deposit')}
-              className="text-[11px] font-semibold text-[#B66DFF] hover:text-white flex items-center gap-1 transition-colors"
+              className="flex-1 py-1.5 px-3 rounded-xl bg-[#8B5CF6]/20 hover:bg-[#8B5CF6]/30 border border-[#8B5CF6]/40 text-[#C4B5FD] hover:text-white text-xs font-semibold text-center transition-colors flex items-center justify-center gap-1"
             >
-              Deposit +
+              <Plus className="w-3.5 h-3.5" /> Deposit
             </button>
-            <span className="text-slate-600">•</span>
+            <button
+              onClick={() => onNavigateTab('investment_plans')}
+              className="flex-1 py-1.5 px-3 rounded-xl bg-[#171225] hover:bg-[#201538] border border-slate-700 hover:border-slate-500 text-slate-300 hover:text-white text-xs font-semibold text-center transition-colors flex items-center justify-center gap-1"
+            >
+              <TrendingUp className="w-3.5 h-3.5 text-[#B66DFF]" /> Explore Plans
+            </button>
+          </div>
+          <div className="absolute top-0 right-0 w-28 h-28 bg-[#8B5CF6]/15 rounded-full blur-3xl pointer-events-none group-hover:bg-[#8B5CF6]/25 transition-all" />
+        </div>
+
+        {/* Card 2: Task Balance (ELIGIBLE ON 30TH DAY 4:50 - 6:20 PM WAT) */}
+        <div className="rounded-3xl p-6 bg-gradient-to-b from-[#152326] to-[#0f191b] border border-emerald-500/30 relative overflow-hidden shadow-xl hover:border-emerald-500/60 transition-all group">
+          <div className="flex items-center justify-between mb-3 text-slate-300">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <Award className="w-4 h-4" />
+              </div>
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Task Balance</span>
+            </div>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold">
+              30th Day Payout
+            </span>
+          </div>
+
+          <div className="text-2xl sm:text-3xl font-extrabold text-emerald-400 tracking-tight tabular-nums mt-1 font-mono">
+            {formatNaira(taskBalance)}
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">
+            Receives daily task rewards. Only eligible for simulated task withdrawal on the 30th of each month (4:50 PM – 6:20 PM WAT).
+          </p>
+
+          <div className="mt-4 pt-4 border-t border-emerald-500/20 flex items-center justify-between gap-2">
+            <button
+              onClick={() => onNavigateTab('tasks')}
+              className="flex-1 py-1.5 px-3 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 hover:text-white text-xs font-semibold text-center transition-colors flex items-center justify-center gap-1"
+            >
+              <Zap className="w-3.5 h-3.5" /> Daily Tasks
+            </button>
             <button
               onClick={() => onNavigateTab('withdrawal')}
-              className="text-[11px] font-semibold text-slate-400 hover:text-white flex items-center gap-1 transition-colors"
+              className="flex-1 py-1.5 px-3 rounded-xl bg-[#171225] hover:bg-[#201538] border border-slate-700 hover:border-slate-500 text-slate-300 hover:text-white text-xs font-semibold text-center transition-colors flex items-center justify-center gap-1"
             >
-              Withdraw ↑
+              <Clock className="w-3.5 h-3.5 text-emerald-400" /> Task Schedule
             </button>
           </div>
-          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all pointer-events-none" />
+          <div className="absolute top-0 right-0 w-28 h-28 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-emerald-500/20 transition-all" />
         </div>
 
-        {/* Active Capital Locked */}
-        <div className="glass-card glass-card-hover rounded-3xl p-5 relative overflow-hidden group">
-          <div className="flex items-center justify-between text-slate-400 mb-3">
-            <span className="text-xs font-semibold tracking-wide uppercase font-mono">Active Capital</span>
-            <div className="w-8 h-8 rounded-xl bg-[#B66DFF]/20 flex items-center justify-center text-[#B66DFF]">
-              <Briefcase className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl lg:text-3xl font-extrabold text-white tracking-tight">
-            ${(user.totalInvested || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
-            <span>{activeInvestments.length} Active Plans</span>
-            <span className="text-[#C4B5FD] font-mono">Avg 2.1% daily</span>
-          </div>
-          <div className="absolute top-0 right-0 w-24 h-24 bg-[#B66DFF]/10 rounded-full blur-2xl group-hover:bg-[#B66DFF]/20 transition-all pointer-events-none" />
-        </div>
-
-        {/* Total Earned Yield */}
-        <div className="glass-card glass-card-hover rounded-3xl p-5 relative overflow-hidden group">
-          <div className="flex items-center justify-between text-slate-400 mb-3">
-            <span className="text-xs font-semibold tracking-wide uppercase font-mono">Harvested Profit</span>
-            <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-400">
-              <Flame className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl lg:text-3xl font-extrabold text-amber-300 tracking-tight">
-            +${(user.totalEarned || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-400 font-semibold">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Auto Compounding Active</span>
-          </div>
-          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition-all pointer-events-none" />
-        </div>
-      </div>
-
-      {/* Main Grid: Interactive Curve Chart + Quick Operations */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Interactive Growth Trajectory Chart */}
-        <div className="lg:col-span-2 glass-card rounded-3xl p-6 relative flex flex-col justify-between">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-white tracking-wide">Yield Growth Trajectory</h3>
-                <span className="px-2 py-0.5 rounded-full bg-[#8B5CF6]/20 border border-[#8B5CF6]/40 text-[#B66DFF] text-[10px] font-mono">
-                  Autonomous Alpha
-                </span>
+        {/* Card 3: Affiliate Balance (DAILY 7:30 PM - 8:40 PM WAT) */}
+        <div className="rounded-3xl p-6 bg-gradient-to-b from-[#251722] to-[#190f17] border border-amber-500/30 relative overflow-hidden shadow-xl hover:border-amber-500/60 transition-all group">
+          <div className="flex items-center justify-between mb-3 text-slate-300">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-400">
+                <Users className="w-4 h-4" />
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">Simulated cumulative returns over time</p>
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Affiliate Balance</span>
             </div>
-
-            {/* Timeframe selector */}
-            <div className="flex items-center bg-[#090711] p-1 rounded-xl border border-[#8B5CF6]/20 self-start sm:self-auto">
-              {(['7D', '30D', '90D', '1Y'] as const).map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setTimeRange(r)}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                    timeRange === r
-                      ? 'bg-[#8B5CF6] text-white shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">
+              Daily 7:30 PM WAT
+            </span>
           </div>
 
-          {/* SVG Glow Chart */}
-          <div className="w-full h-56 relative flex items-end justify-between px-2 pt-6">
-            <svg
-              className="w-full h-full overflow-visible"
-              viewBox="0 0 500 180"
-              preserveAspectRatio="none"
-            >
-              <defs>
-                <linearGradient id="purpleGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#B66DFF" stopOpacity="0.45" />
-                  <stop offset="70%" stopColor="#8B5CF6" stopOpacity="0.1" />
-                  <stop offset="100%" stopColor="#090711" stopOpacity="0.0" />
-                </linearGradient>
-                <linearGradient id="lineStroke" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="#8B5CF6" />
-                  <stop offset="50%" stopColor="#B66DFF" />
-                  <stop offset="100%" stopColor="#E9D5FF" />
-                </linearGradient>
-              </defs>
-
-              {/* Grid lines */}
-              <line x1="0" y1="40" x2="500" y2="40" stroke="#8B5CF6" strokeOpacity="0.1" strokeDasharray="4 4" />
-              <line x1="0" y1="90" x2="500" y2="90" stroke="#8B5CF6" strokeOpacity="0.1" strokeDasharray="4 4" />
-              <line x1="0" y1="140" x2="500" y2="140" stroke="#8B5CF6" strokeOpacity="0.1" strokeDasharray="4 4" />
-
-              {/* Dynamic Path Calculation based on points */}
-              {(() => {
-                const maxVal = Math.max(...points.map((p) => p.value));
-                const minVal = Math.min(...points.map((p) => p.value));
-                const range = maxVal - minVal || 1;
-                const coords = points.map((p, idx) => {
-                  const x = (idx / (points.length - 1)) * 500;
-                  const y = 160 - ((p.value - minVal) / range) * 120;
-                  return { x, y };
-                });
-
-                // Generate smooth cubic bezier string
-                let d = `M ${coords[0].x} ${coords[0].y}`;
-                for (let i = 0; i < coords.length - 1; i++) {
-                  const p0 = coords[i];
-                  const p1 = coords[i + 1];
-                  const mx = (p0.x + p1.x) / 2;
-                  d += ` C ${mx} ${p0.y}, ${mx} ${p1.y}, ${p1.x} ${p1.y}`;
-                }
-
-                const areaD = `${d} L 500 180 L 0 180 Z`;
-
-                return (
-                  <>
-                    <path d={areaD} fill="url(#purpleGradient)" />
-                    <path d={d} fill="none" stroke="url(#lineStroke)" strokeWidth="3.5" strokeLinecap="round" />
-                    {coords.map((c, i) => (
-                      <g key={i}>
-                        <circle cx={c.x} cy={c.y} r="5" fill="#171225" stroke="#B66DFF" strokeWidth="2.5" />
-                        <circle cx={c.x} cy={c.y} r="2" fill="#FFFFFF" />
-                      </g>
-                    ))}
-                  </>
-                );
-              })()}
-            </svg>
+          <div className="text-2xl sm:text-3xl font-extrabold text-amber-300 tracking-tight tabular-nums mt-1 font-mono">
+            {formatNaira(affiliateBalance)}
           </div>
+          <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">
+            Receives referral rewards. Eligible for simulated affiliate withdrawal daily (7:30 PM – 8:40 PM WAT).
+          </p>
 
-          {/* Chart X-axis labels */}
-          <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono mt-3 px-1">
-            {points.map((p, idx) => (
-              <span key={idx}>{p.label}</span>
-            ))}
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-            <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              Quant Algorithms active across 4 liquidity nodes
-            </div>
+          <div className="mt-4 pt-4 border-t border-amber-500/20 flex items-center justify-between gap-2">
             <button
-              onClick={() => onNavigateTab('portfolio')}
-              className="text-[#B66DFF] hover:underline flex items-center gap-1 font-semibold"
+              onClick={handleCopyLink}
+              className="flex-1 py-1.5 px-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 hover:text-white text-xs font-semibold text-center transition-colors flex items-center justify-center gap-1"
             >
-              Detailed Breakdown <ArrowUpRight className="w-3.5 h-3.5" />
+              <Copy className="w-3.5 h-3.5" /> {copiedLink ? 'Copied!' : 'Copy Link'}
+            </button>
+            <button
+              onClick={() => onNavigateTab('withdrawal')}
+              className="flex-1 py-1.5 px-3 rounded-xl bg-[#171225] hover:bg-[#201538] border border-slate-700 hover:border-slate-500 text-slate-300 hover:text-white text-xs font-semibold text-center transition-colors flex items-center justify-center gap-1"
+            >
+              <ArrowUpRight className="w-3.5 h-3.5 text-amber-400" /> Withdraw
             </button>
           </div>
-        </div>
-
-        {/* Quick Actions & Protocol Highlights */}
-        <div className="glass-card rounded-3xl p-6 flex flex-col justify-between">
-          <div>
-            <h3 className="text-base font-bold text-white tracking-wide mb-1">Quick Actions</h3>
-            <p className="text-xs text-slate-400 mb-5">Instant execution sandbox triggers</p>
-
-            <div className="grid grid-cols-2 gap-3 mb-5">
-              <button
-                onClick={() => onNavigateTab('deposit')}
-                className="p-3.5 rounded-2xl bg-gradient-to-br from-[#8B5CF6]/20 to-[#6D28D9]/30 border border-[#8B5CF6]/30 hover:border-[#8B5CF6]/60 transition-all text-left group"
-              >
-                <div className="w-8 h-8 rounded-xl bg-[#8B5CF6]/30 flex items-center justify-center text-white mb-2 group-hover:scale-105 transition-transform">
-                  <ArrowDownCircle className="w-4 h-4" />
-                </div>
-                <div className="text-xs font-bold text-white">Deposit</div>
-                <div className="text-[10px] text-slate-400">Simulate funds</div>
-              </button>
-
-              <button
-                onClick={() => onNavigateTab('investment_plans')}
-                className="p-3.5 rounded-2xl bg-gradient-to-br from-[#B66DFF]/20 to-[#8B5CF6]/20 border border-[#B66DFF]/30 hover:border-[#B66DFF]/60 transition-all text-left group"
-              >
-                <div className="w-8 h-8 rounded-xl bg-[#B66DFF]/30 flex items-center justify-center text-white mb-2 group-hover:scale-105 transition-transform">
-                  <TrendingUp className="w-4 h-4" />
-                </div>
-                <div className="text-xs font-bold text-white">Invest Plans</div>
-                <div className="text-[10px] text-slate-400">Up to 3.1% daily</div>
-              </button>
-
-              <button
-                onClick={() => onNavigateTab('withdrawal')}
-                className="p-3.5 rounded-2xl bg-[#090711]/70 border border-slate-800 hover:border-[#8B5CF6]/40 transition-all text-left group"
-              >
-                <div className="w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center text-slate-300 mb-2 group-hover:scale-105 transition-transform">
-                  <ArrowUpCircle className="w-4 h-4" />
-                </div>
-                <div className="text-xs font-bold text-white">Withdraw</div>
-                <div className="text-[10px] text-slate-400">Simulated payout</div>
-              </button>
-
-              <button
-                onClick={() => onNavigateTab('referrals')}
-                className="p-3.5 rounded-2xl bg-[#090711]/70 border border-slate-800 hover:border-[#8B5CF6]/40 transition-all text-left group"
-              >
-                <div className="w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center text-slate-300 mb-2 group-hover:scale-105 transition-transform">
-                  <Sparkles className="w-4 h-4" />
-                </div>
-                <div className="text-xs font-bold text-white">Affiliate</div>
-                <div className="text-[10px] text-slate-400">7% commission</div>
-              </button>
-            </div>
-          </div>
-
-          {/* Featured Plan highlight */}
-          {plans.length > 0 && (
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-[#1F1835] to-[#120E1E] border border-[#8B5CF6]/35 relative overflow-hidden">
-              <div className="flex items-center justify-between text-xs mb-2">
-                <span className="text-[10px] uppercase font-bold text-[#B66DFF] tracking-wider font-mono">
-                  HOTTEST PLAN
-                </span>
-                <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
-                  {plans[0].dailyRoi}% DAILY
-                </span>
-              </div>
-              <h4 className="text-sm font-extrabold text-white">{plans[0].name}</h4>
-              <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">{plans[0].description}</p>
-              <div className="mt-3 flex items-center justify-between">
-                <span className="text-xs text-slate-300 font-mono">
-                  Min ${plans[0].minDeposit.toLocaleString()}
-                </span>
-                <button
-                  onClick={() => onNavigateTab('investment_plans')}
-                  className="px-3 py-1.5 rounded-xl bg-[#8B5CF6] hover:bg-[#B66DFF] text-white text-xs font-bold transition-all shadow-md shadow-[#8B5CF6]/30"
-                >
-                  Allocate
-                </button>
-              </div>
-            </div>
-          )}
+          <div className="absolute top-0 right-0 w-28 h-28 bg-amber-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-amber-500/20 transition-all" />
         </div>
       </div>
 
-      {/* Active Investments Harvest Section */}
-      <div className="glass-card rounded-3xl p-6">
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h3 className="text-base font-bold text-white tracking-wide">Active Investment Contracts</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Live harvesting & yield accrual</p>
+      {/* 4. QUICK-ACCESS SHORTCUTS */}
+      <div className="space-y-2">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1 font-mono">
+          Quick Shortcuts
+        </h3>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <button
+            onClick={() => onNavigateTab('deposit')}
+            className="p-3.5 rounded-2xl bg-[#171225] hover:bg-[#221838] border border-[#8B5CF6]/20 hover:border-[#8B5CF6]/50 transition-all flex flex-col items-center justify-center text-center group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600/30 to-violet-800/30 flex items-center justify-center text-[#B66DFF] group-hover:scale-105 transition-transform mb-2">
+              <ArrowDownCircle className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-bold text-white">Deposit</span>
+            <span className="text-[10px] text-slate-400 mt-0.5">Fund in NGN</span>
+          </button>
+
+          <button
+            onClick={() => onNavigateTab('withdrawal')}
+            className="p-3.5 rounded-2xl bg-[#171225] hover:bg-[#221838] border border-[#8B5CF6]/20 hover:border-[#8B5CF6]/50 transition-all flex flex-col items-center justify-center text-center group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600/30 to-teal-800/30 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform mb-2">
+              <ArrowUpCircle className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-bold text-white">Withdrawals</span>
+            <span className="text-[10px] text-slate-400 mt-0.5">WAT Schedules</span>
+          </button>
+
+          <button
+            onClick={() => onNavigateTab('investment_plans')}
+            className="p-3.5 rounded-2xl bg-[#171225] hover:bg-[#221838] border border-[#8B5CF6]/20 hover:border-[#8B5CF6]/50 transition-all flex flex-col items-center justify-center text-center group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600/30 to-indigo-800/30 flex items-center justify-center text-blue-400 group-hover:scale-105 transition-transform mb-2">
+              <TrendingUp className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-bold text-white">5 Plan Tiers</span>
+            <span className="text-[10px] text-slate-400 mt-0.5">₦1.5k – ₦12k</span>
+          </button>
+
+          <button
+            onClick={() => onNavigateTab('tasks')}
+            className="p-3.5 rounded-2xl bg-[#171225] hover:bg-[#221838] border border-[#8B5CF6]/20 hover:border-[#8B5CF6]/50 transition-all flex flex-col items-center justify-center text-center group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-600/30 to-yellow-800/30 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform mb-2">
+              <Award className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-bold text-white">Plan Tasks</span>
+            <span className="text-[10px] text-slate-400 mt-0.5">24h Reset</span>
+          </button>
+
+          <button
+            onClick={() => onNavigateTab('referrals')}
+            className="p-3.5 rounded-2xl bg-[#171225] hover:bg-[#221838] border border-[#8B5CF6]/20 hover:border-[#8B5CF6]/50 transition-all flex flex-col items-center justify-center text-center group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-600/30 to-rose-800/30 flex items-center justify-center text-pink-400 group-hover:scale-105 transition-transform mb-2">
+              <Users className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-bold text-white">Affiliate</span>
+            <span className="text-[10px] text-slate-400 mt-0.5">7% Commission</span>
+          </button>
+
+          <button
+            onClick={() => onNavigateTab('support')}
+            className="p-3.5 rounded-2xl bg-[#171225] hover:bg-[#221838] border border-[#8B5CF6]/20 hover:border-[#8B5CF6]/50 transition-all flex flex-col items-center justify-center text-center group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-600/30 to-teal-800/30 flex items-center justify-center text-cyan-400 group-hover:scale-105 transition-transform mb-2">
+              <HelpCircle className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-bold text-white">Support Desk</span>
+            <span className="text-[10px] text-slate-400 mt-0.5">24/7 Assistance</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 5. MY PLANS SECTION WITH CLEAN PLAN CARDS */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-bold text-white tracking-wide">My Active & Expired Plans</h3>
+            <span className="px-2 py-0.5 rounded-md bg-[#8B5CF6]/20 text-[#C4B5FD] text-xs font-mono">
+              {activeInvestments.length} Running
+            </span>
           </div>
           <button
-            onClick={() => onNavigateTab('my_investments')}
-            className="text-xs text-[#B66DFF] hover:underline font-semibold flex items-center gap-1"
+            onClick={() => onNavigateTab('investment_plans')}
+            className="text-xs font-semibold text-[#B66DFF] hover:text-white flex items-center gap-1 transition-colors"
           >
-            View All ({investments.length}) <ArrowUpRight className="w-3.5 h-3.5" />
+            View All 5 Plans <ChevronRight className="w-4 h-4" />
           </button>
         </div>
 
-        {activeInvestments.length === 0 ? (
-          <div className="text-center py-10 px-4 rounded-2xl bg-[#090711]/50 border border-dashed border-[#8B5CF6]/20">
-            <Briefcase className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-            <h4 className="text-sm font-semibold text-white">No active investment contracts yet</h4>
-            <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-              Allocate your simulated liquid balance into any quantum plan to begin harvesting daily profits.
-            </p>
-            <button
-              onClick={() => onNavigateTab('investment_plans')}
-              className="mt-4 px-4 py-2 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#7C3AED] text-white text-xs font-semibold shadow-md"
-            >
-              Explore Plans
-            </button>
-          </div>
-        ) : (
+        {activeInvestments.length > 0 || expiredInvestments.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {activeInvestments.slice(0, 3).map((inv) => {
-              const progressPct = Math.min(100, Math.round(((inv.daysElapsed || 0) / inv.durationDays) * 100));
+            {/* Active Plans */}
+            {activeInvestments.map((inv) => {
+              const daysRemaining = Math.max(0, (inv.durationDays || 30) - (inv.daysElapsed || 0));
+              const progressPct = Math.min(
+                100,
+                Math.round(((inv.daysElapsed || 1) / (inv.durationDays || 30)) * 100)
+              );
+
               return (
                 <div
                   key={inv.id}
-                  className="p-4 rounded-2xl bg-[#090711]/70 border border-[#8B5CF6]/25 hover:border-[#8B5CF6]/50 transition-all flex flex-col justify-between"
+                  className="p-5 rounded-3xl bg-[#171225] border border-[#8B5CF6]/30 hover:border-[#8B5CF6]/60 transition-all shadow-md flex flex-col justify-between"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] uppercase font-mono text-[#B66DFF] font-bold">
-                        {inv.dailyRoi}% Daily ROI
-                      </span>
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[10px] font-semibold flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        Active
+                      <span className="text-xs font-bold text-white line-clamp-1">{inv.planName}</span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
+                        ACTIVE
                       </span>
                     </div>
 
-                    <h4 className="text-sm font-bold text-white">{inv.planName}</h4>
-
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <span className="text-[10px] text-slate-400">Principal</span>
-                        <div className="font-bold text-white">${inv.amount.toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400">Earned So Far</span>
-                        <div className="font-bold text-emerald-400">+${(inv.totalEarned || 0).toFixed(2)}</div>
-                      </div>
+                    <div className="text-xl font-black text-white tabular-nums font-mono">
+                      {formatNaira(inv.amount)}
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-slate-400 mt-2">
+                      <span>Daily Task: <strong className="text-emerald-400">+{formatNaira(inv.dailyRoi || 400, false)}</strong></span>
+                      <span>Earned: <strong className="text-white">{formatNaira(inv.totalEarned || 0)}</strong></span>
                     </div>
 
-                    {/* Progress bar */}
                     <div className="mt-3">
-                      <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
                         <span>Duration Progress</span>
-                        <span className="font-mono">{inv.daysElapsed || 0} / {inv.durationDays} Days</span>
+                        <span>{inv.daysElapsed || 0} / {inv.durationDays} Days</span>
                       </div>
-                      <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
                         <div
-                          className="h-full bg-gradient-to-r from-[#8B5CF6] to-[#B66DFF]"
+                          className="h-full bg-gradient-to-r from-[#8B5CF6] to-[#B66DFF] rounded-full transition-all duration-500"
                           style={{ width: `${progressPct}%` }}
                         />
                       </div>
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => handleClaimYield(inv)}
-                    disabled={claimingId === inv.id}
-                    className="mt-4 w-full py-2 rounded-xl bg-[#8B5CF6]/20 hover:bg-[#8B5CF6]/40 border border-[#8B5CF6]/40 text-[#B66DFF] hover:text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
-                  >
-                    <Zap className="w-3.5 h-3.5 text-amber-400" />
-                    {claimingId === inv.id ? 'Harvesting...' : 'Harvest Accrued Yield'}
-                  </button>
+                  <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-slate-400 font-mono">
+                      Expires on 30th ({daysRemaining}d left)
+                    </span>
+                    <button
+                      onClick={() => onNavigateTab('tasks')}
+                      className="py-1 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-slate-950 font-bold text-xs transition-all active:scale-95"
+                    >
+                      Open Task
+                    </button>
+                  </div>
                 </div>
               );
             })}
+
+            {/* Expired Plans */}
+            {expiredInvestments.map((inv) => (
+              <div
+                key={inv.id}
+                className="p-5 rounded-3xl bg-[#1c141d] border border-amber-500/40 shadow-md flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-white line-clamp-1">{inv.planName}</span>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold">
+                      EXPIRED (30th DAY)
+                    </span>
+                  </div>
+
+                  <div className="text-xl font-black text-slate-300 tabular-nums font-mono">
+                    {formatNaira(inv.amount)}
+                  </div>
+                  <p className="text-xs text-amber-200/80 mt-2">
+                    Monthly cycle completed on the 30th. Renew to reactivate daily tasks.
+                  </p>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-slate-400 font-mono">Cycle Concluded</span>
+                  <button
+                    onClick={() => handleRenewPlan(inv)}
+                    disabled={isRenewing}
+                    className="py-1.5 px-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    {isRenewing ? 'Renewing...' : 'Renew Plan'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-6 rounded-3xl bg-[#171225]/80 border border-[#8B5CF6]/20 text-center flex flex-col items-center">
+            <div className="w-12 h-12 rounded-2xl bg-[#8B5CF6]/15 flex items-center justify-center text-[#B66DFF] mb-3">
+              <Briefcase className="w-6 h-6" />
+            </div>
+            <h4 className="text-sm font-bold text-white">No Active Investment Plans</h4>
+            <p className="text-xs text-slate-400 mt-1 max-w-md">
+              Activate one of the 5 plans (Tier 1, Popular, Tier 3, Tier 4, Premier) to unlock matching daily tasks and simulated returns.
+            </p>
+            <button
+              onClick={() => onNavigateTab('investment_plans')}
+              className="mt-4 px-5 py-2 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#7C3AED] hover:from-[#7C3AED] hover:to-[#6D28D9] text-white text-xs font-bold transition-all shadow-md active:scale-95 flex items-center gap-1.5"
+            >
+              <span>Explore 5 Investment Plans</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
           </div>
         )}
       </div>
 
-      {/* Recent Ledger Feed */}
-      <div className="glass-card rounded-3xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-bold text-white tracking-wide">Recent Transactions</h3>
+      {/* 6. DAILY TASKS SECTION WITH PROGRESS AND CLAIM STATUS */}
+      <div id="daily-tasks-section" className="space-y-4">
+        <div className="p-6 rounded-3xl bg-gradient-to-r from-[#171225] via-[#1c142c] to-[#171225] border border-[#8B5CF6]/30 shadow-lg">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-400">
+                  <Award className="w-4 h-4" />
+                </div>
+                <h3 className="text-base font-bold text-white tracking-wide">Daily Tasks & 24h Resets</h3>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Your active plan tier unlocks its exclusive task. Rewards are credited directly to your Task Balance.
+              </p>
+            </div>
+
+            <button
+              onClick={() => onNavigateTab('tasks')}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-bold text-xs shadow-md self-start sm:self-auto flex items-center gap-1.5"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              <span>Open Plan Tasks Hub</span>
+            </button>
+          </div>
+
+          {/* Quick status card for active plan task */}
+          {activePlanMeta ? (
+            <div className="p-4 rounded-2xl bg-[#120c1e] border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div>
+                <span className="text-[10px] uppercase font-mono text-slate-400 block">Current Active Plan</span>
+                <span className="font-bold text-white text-sm">{activePlanMeta.name} Tier</span>
+                <p className="text-slate-300 text-xs mt-0.5">
+                  Daily Reward: <strong className="text-emerald-400">+{formatNaira(activePlanMeta.dailyTaskReward || 400)}</strong>
+                </p>
+              </div>
+
+              <button
+                onClick={() => onNavigateTab('tasks')}
+                className="px-4 py-2 rounded-xl bg-[#8B5CF6] hover:bg-[#B66DFF] text-white font-bold text-xs transition-all flex items-center gap-1.5 self-start sm:self-auto"
+              >
+                <span>Complete Task</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="p-4 rounded-2xl bg-[#120c1e] border border-slate-800 text-xs text-slate-400 flex items-center justify-between">
+              <span>No plan currently subscribed. Subscribe to a plan to start earning daily task rewards.</span>
+              <button
+                onClick={() => onNavigateTab('investment_plans')}
+                className="text-[#B66DFF] font-bold hover:underline shrink-0 ml-3"
+              >
+                Subscribe Now →
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 7. REFERRAL OVERVIEW SECTION */}
+      <div className="p-6 rounded-3xl bg-[#171225] border border-[#8B5CF6]/30 shadow-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-pink-500/20 flex items-center justify-center text-pink-400">
+                <Users className="w-4 h-4" />
+              </div>
+              <h3 className="text-base font-bold text-white tracking-wide">Referral & Affiliate Overview</h3>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              Invite members to FINVANTA and receive 7.0% Tier 1 and 3.0% Tier 2 direct commission in Nigerian Naira.
+            </p>
+          </div>
           <button
-            onClick={() => onNavigateTab('transactions')}
-            className="text-xs text-[#B66DFF] hover:underline font-semibold"
+            onClick={() => onNavigateTab('referrals')}
+            className="text-xs font-semibold text-[#B66DFF] hover:text-white flex items-center gap-1 self-start sm:self-auto transition-colors"
           >
-            Full Ledger →
+            Full Affiliate Dashboard <ChevronRight className="w-4 h-4" />
           </button>
         </div>
 
-        {transactions.length === 0 ? (
-          <div className="text-center py-6 text-xs text-slate-500">No recorded transactions yet.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-slate-800 text-slate-400 uppercase font-mono text-[10px]">
-                  <th className="py-2.5 px-3">Type</th>
-                  <th className="py-2.5 px-3">Reference</th>
-                  <th className="py-2.5 px-3">Amount</th>
-                  <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-3">Date</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {transactions.slice(0, 5).map((tx) => (
-                  <tr key={tx.id} className="hover:bg-[#8B5CF6]/5 transition-colors">
-                    <td className="py-3 px-3 capitalize font-medium text-white flex items-center gap-2">
-                      {tx.type === 'deposit' && <ArrowDownCircle className="w-3.5 h-3.5 text-emerald-400" />}
-                      {tx.type === 'withdrawal' && <ArrowUpCircle className="w-3.5 h-3.5 text-amber-400" />}
-                      {tx.type === 'roi_payout' && <Zap className="w-3.5 h-3.5 text-[#B66DFF]" />}
-                      {tx.type === 'investment' && <Briefcase className="w-3.5 h-3.5 text-purple-400" />}
-                      {tx.type.replace('_', ' ')}
-                    </td>
-                    <td className="py-3 px-3 font-mono text-slate-400">{tx.reference || tx.id.slice(-8)}</td>
-                    <td className="py-3 px-3 font-semibold text-white">
-                      {tx.type === 'withdrawal' ? '-' : '+'}${tx.amount.toLocaleString()} {tx.currency || 'USD'}
-                    </td>
-                    <td className="py-3 px-3">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                          tx.status === 'completed'
-                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                            : tx.status === 'pending'
-                            ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                            : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+          <div className="p-4 rounded-2xl bg-[#1d162e] border border-[#8B5CF6]/20">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-mono">
+              Affiliate Earnings
+            </span>
+            <div className="text-xl font-black text-amber-300 mt-1 tabular-nums font-mono">
+              {formatNaira(affiliateBalance)}
+            </div>
+            <span className="text-[10px] text-slate-400 mt-0.5 block">
+              Withdrawal: Daily 7:30 PM – 8:40 PM WAT
+            </span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-[#1d162e] border border-[#8B5CF6]/20">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-mono">
+              Commission Rates
+            </span>
+            <div className="text-xl font-black text-white mt-1">
+              7.0% <span className="text-xs text-slate-400 font-normal">/ 3.0%</span>
+            </div>
+            <span className="text-[10px] text-emerald-400 mt-0.5 block font-medium">Instant wallet credits</span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-[#1d162e] border border-[#8B5CF6]/20">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-mono">
+              My Referral Code
+            </span>
+            <div className="text-xl font-black text-[#B66DFF] mt-1 tracking-wider font-mono">
+              {user.referralCode || 'FV-SCHOLAR'}
+            </div>
+            <button
+              onClick={handleCopyCode}
+              className="text-[10px] text-slate-300 hover:text-white mt-0.5 underline flex items-center gap-1"
+            >
+              {copiedCode ? 'Copied code!' : 'Click to copy code'}
+            </button>
+          </div>
+        </div>
+
+        {/* Share Link Strip */}
+        <div className="p-3.5 rounded-2xl bg-[#120c1e] border border-[#8B5CF6]/30 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Share2 className="w-4 h-4 text-[#B66DFF] shrink-0" />
+            <span className="text-xs text-slate-300 truncate font-mono">{referralUrl}</span>
+          </div>
+          <button
+            onClick={handleCopyLink}
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#7C3AED] hover:from-[#7C3AED] hover:to-[#6D28D9] text-white font-bold text-xs transition-all active:scale-95 shrink-0 flex items-center justify-center gap-1.5"
+          >
+            <Copy className="w-3.5 h-3.5" />
+            <span>{copiedLink ? 'Copied Link!' : 'Copy Invitation Link'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 8. RECENT ACTIVITY SECTION */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <History className="w-4 h-4 text-[#B66DFF]" />
+            <h3 className="text-base font-bold text-white tracking-wide">Recent Activity</h3>
+          </div>
+          <button
+            onClick={() => onNavigateTab('transactions')}
+            className="text-xs font-semibold text-[#B66DFF] hover:text-white flex items-center gap-1 transition-colors"
+          >
+            View Full Ledger <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        {transactions.length > 0 ? (
+          <div className="rounded-3xl bg-[#171225] border border-[#8B5CF6]/25 overflow-hidden shadow-md">
+            <div className="divide-y divide-slate-800">
+              {transactions.slice(0, 5).map((tx) => {
+                const isCredit =
+                  tx.type === 'deposit' ||
+                  tx.type === 'roi_payout' ||
+                  tx.type === 'referral_bonus' ||
+                  (tx.type as any) === 'task_reward' ||
+                  (tx.type === 'admin_adjustment' && tx.note?.includes('Transfer from Task'));
+
+                return (
+                  <div
+                    key={tx.id}
+                    className="p-4 flex items-center justify-between gap-3 hover:bg-[#1e1730] transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                          isCredit ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
                         }`}
                       >
+                        {isCredit ? <ArrowDownCircle className="w-5 h-5" /> : <ArrowUpCircle className="w-5 h-5" />}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-white truncate">
+                            {tx.note || tx.type.replace('_', ' ').toUpperCase()}
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#8B5CF6]/20 text-[#C4B5FD] font-mono hidden sm:inline-block">
+                            {tx.reference || tx.id.slice(0, 8)}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-slate-400 mt-0.5 block">
+                          {new Date(tx.createdAt).toLocaleDateString('en-NG', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span
+                        className={`text-xs sm:text-sm font-extrabold tabular-nums font-mono ${
+                          isCredit ? 'text-emerald-400' : 'text-slate-200'
+                        }`}
+                      >
+                        {isCredit ? '+' : '-'}{formatNaira(tx.amount)}
+                      </span>
+                      <span className="block text-[10px] text-slate-400 uppercase font-mono mt-0.5">
                         {tx.status}
                       </span>
-                    </td>
-                    <td className="py-3 px-3 text-slate-400 text-[11px]">
-                      {new Date(tx.createdAt).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="p-6 rounded-3xl bg-[#171225]/70 border border-[#8B5CF6]/20 text-center text-slate-400 text-xs">
+            No activity recorded yet. Simulated deposits, tasks, and plan returns will appear here.
           </div>
         )}
       </div>
+
+      {/* 9. ANNOUNCEMENTS SECTION */}
+      {announcements.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Megaphone className="w-4 h-4 text-[#B66DFF]" />
+            <h3 className="text-base font-bold text-white tracking-wide">Platform Announcements</h3>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {announcements.slice(0, 2).map((ann) => (
+              <div
+                key={ann.id}
+                className="p-5 rounded-3xl bg-[#171225] border border-[#8B5CF6]/25 hover:border-[#8B5CF6]/50 transition-all shadow-md"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-white line-clamp-1">{ann.title}</span>
+                  <span className="px-2 py-0.5 rounded-full bg-[#8B5CF6]/20 text-[#C4B5FD] text-[10px] font-mono uppercase">
+                    {ann.category.replace('_', ' ')}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed line-clamp-3 mt-1">
+                  {ann.content}
+                </p>
+                <div className="mt-4 pt-3 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+                  <span>Author: {ann.author}</span>
+                  <span>{new Date(ann.createdAt).toLocaleDateString('en-NG')}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

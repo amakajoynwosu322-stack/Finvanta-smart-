@@ -2,18 +2,20 @@ import React, { useState } from 'react';
 import {
   ArrowDownCircle,
   ArrowUpCircle,
+  Award,
   CheckCircle,
-  Coins,
   CreditCard,
-  DollarSign,
   HelpCircle,
+  PieChart,
   RefreshCw,
   ShieldCheck,
   Sparkles,
   TrendingUp,
+  Users,
   Wallet
 } from 'lucide-react';
 import { UserProfile } from '../../types';
+import { formatNaira } from '../../utils/currency';
 
 interface AvailableBalanceTabProps {
   user: UserProfile;
@@ -24,23 +26,14 @@ export const AvailableBalanceTab: React.FC<AvailableBalanceTabProps> = ({
   user,
   onNavigateTab
 }) => {
-  const [targetCurrency, setTargetCurrency] = useState<'USDT' | 'BTC' | 'ETH' | 'EUR'>('USDT');
+  const mainBalance = user.balance || 0;
+  const taskBalance = user.taskBalance || 0;
+  const affiliateBalance = user.affiliateBalance ?? (user.totalEarned ? user.totalEarned * 0.15 : 0);
+  const totalInvested = user.totalInvested || 0;
+  const totalCombinedAssets = mainBalance + taskBalance + affiliateBalance + totalInvested;
 
-  const btcRate = 98420.0;
-  const ethRate = 3450.0;
-  const eurRate = 1.08;
-
-  const balance = user.balance || 0;
-  const convertedValues = {
-    USDT: balance.toFixed(2),
-    BTC: (balance / btcRate).toFixed(5),
-    ETH: (balance / ethRate).toFixed(4),
-    EUR: (balance / eurRate).toFixed(2),
-  };
-
-  const totalCapital = balance + (user.totalInvested || 0);
-  const liquidPct = totalCapital > 0 ? Math.round((balance / totalCapital) * 100) : 100;
-  const lockedPct = 100 - liquidPct;
+  const liquidPct = totalCombinedAssets > 0 ? Math.round(((mainBalance + taskBalance + affiliateBalance) / totalCombinedAssets) * 100) : 100;
+  const investedPct = 100 - liquidPct;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
@@ -49,10 +42,10 @@ export const AvailableBalanceTab: React.FC<AvailableBalanceTabProps> = ({
         <div>
           <h2 className="text-xl font-bold text-white tracking-wide flex items-center gap-2">
             <Wallet className="w-5 h-5 text-emerald-400" />
-            Available Liquid Balance
+            Wallet & Balance Portfolio (NGN / ₦)
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Real-time liquid capital ready for immediate plan deployment or simulated payout.
+            Real-time liquid capital ready for immediate savings plan deployment or Nigerian bank payout.
           </p>
         </div>
 
@@ -62,136 +55,139 @@ export const AvailableBalanceTab: React.FC<AvailableBalanceTabProps> = ({
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold text-xs shadow-md transition-all active:scale-95"
           >
             <ArrowDownCircle className="w-4 h-4" />
-            Simulate Deposit
+            <span>Fund Wallet</span>
           </button>
           <button
             onClick={() => onNavigateTab('withdrawal')}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#171225] hover:bg-[#201538] border border-[#8B5CF6]/30 hover:border-[#8B5CF6]/60 text-white font-semibold text-xs transition-all active:scale-95"
           >
-            <ArrowUpCircle className="w-4 h-4 text-[#B66DFF]" />
-            Withdraw
+            <ArrowUpCircle className="w-4 h-4" />
+            <span>Withdraw</span>
           </button>
         </div>
       </div>
 
-      {/* Main Glass Hero Card */}
-      <div className="glass-card rounded-3xl p-7 relative overflow-hidden border-[#8B5CF6]/30 glow-purple-sm">
+      {/* Main Hero Card */}
+      <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-br from-[#1F1735] via-[#171225] to-[#120E1E] border border-[#8B5CF6]/40 shadow-2xl relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <div className="flex items-center gap-2 text-slate-400 text-xs font-mono uppercase tracking-wider mb-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              Settled Liquid Balance
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono uppercase tracking-widest text-[#C4B5FD] font-bold">
+                Total Available Liquid Balance
+              </span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold">
+                Nigerian Naira (₦)
+              </span>
             </div>
-            <div className="text-4xl sm:text-5xl font-black text-white tracking-tight">
-              ${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              <span className="text-lg font-bold text-[#B66DFF] ml-2">USD</span>
+
+            <div className="text-3xl sm:text-5xl font-black text-white tracking-tight mt-2 tabular-nums">
+              {formatNaira(mainBalance)}
             </div>
-            <p className="text-xs text-slate-400 mt-2 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              100% available without lockups or settlement delays.
+
+            <p className="text-xs text-slate-300 mt-2 max-w-lg">
+              Main wallet balance ready for instantaneous plan subscriptions, compounding allocations, or NIP bank settlement.
             </p>
           </div>
 
-          {/* Quick Currency Conversion Badges */}
-          <div className="p-4 rounded-2xl bg-[#090711]/70 border border-[#8B5CF6]/20 flex flex-col gap-2 min-w-[240px]">
-            <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider">
-              Real-Time Equivalent Valuations
+          <div className="p-4 rounded-2xl bg-[#090711]/70 border border-[#8B5CF6]/30 flex flex-col gap-2 min-w-[200px]">
+            <span className="text-[10px] font-mono text-slate-400 uppercase">Total Combined Assets</span>
+            <span className="text-xl font-black text-emerald-400 tabular-nums">
+              {formatNaira(totalCombinedAssets)}
             </span>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="p-2 rounded-xl bg-[#171225] border border-slate-800">
-                <div className="text-[10px] text-slate-400">USDT (TRC-20)</div>
-                <div className="font-bold text-white font-mono">{convertedValues.USDT}</div>
-              </div>
-              <div className="p-2 rounded-xl bg-[#171225] border border-slate-800">
-                <div className="text-[10px] text-slate-400">Bitcoin (BTC)</div>
-                <div className="font-bold text-amber-400 font-mono">{convertedValues.BTC}</div>
-              </div>
-              <div className="p-2 rounded-xl bg-[#171225] border border-slate-800">
-                <div className="text-[10px] text-slate-400">Ethereum (ETH)</div>
-                <div className="font-bold text-sky-400 font-mono">{convertedValues.ETH}</div>
-              </div>
-              <div className="p-2 rounded-xl bg-[#171225] border border-slate-800">
-                <div className="text-[10px] text-slate-400">Euro (EUR)</div>
-                <div className="font-bold text-slate-200 font-mono">€{convertedValues.EUR}</div>
-              </div>
+            <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-800">
+              <span>Liquid: {liquidPct}%</span>
+              <span>Active Plans: {investedPct}%</span>
             </div>
           </div>
         </div>
-
-        {/* Ambient background blur */}
-        <div className="absolute -top-16 -right-16 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-16 -left-16 w-64 h-64 bg-[#8B5CF6]/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-0 right-0 w-80 h-80 bg-[#8B5CF6]/15 rounded-full blur-3xl pointer-events-none" />
       </div>
 
-      {/* Capital Structure Split: Liquid vs Locked */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="glass-card rounded-3xl p-6">
-          <h3 className="text-base font-bold text-white tracking-wide mb-2">Liquidity Ratio</h3>
-          <p className="text-xs text-slate-400 mb-5">Current allocation of your account capital</p>
-
-          <div className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between text-xs mb-1.5 font-semibold">
-                <span className="text-emerald-400">Liquid Available ({liquidPct}%)</span>
-                <span className="text-[#B66DFF]">Locked in Yield Plans ({lockedPct}%)</span>
-              </div>
-              <div className="w-full h-3 bg-[#090711] rounded-full overflow-hidden flex">
-                <div style={{ width: `${liquidPct}%` }} className="bg-emerald-400 h-full transition-all" />
-                <div style={{ width: `${lockedPct}%` }} className="bg-[#8B5CF6] h-full transition-all" />
+      {/* Three Detailed Wallet Breakdown Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        {/* Main Wallet */}
+        <div className="rounded-3xl p-6 bg-[#171225] border border-[#8B5CF6]/30 shadow-lg flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">Main Balance</span>
+              <div className="w-8 h-8 rounded-xl bg-[#8B5CF6]/20 flex items-center justify-center text-[#B66DFF]">
+                <Wallet className="w-4 h-4" />
               </div>
             </div>
-
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <div className="p-3.5 rounded-2xl bg-[#090711]/60 border border-emerald-500/20">
-                <span className="text-[10px] text-slate-400 uppercase font-mono">Liquid Ready</span>
-                <div className="text-lg font-bold text-white mt-1">${balance.toLocaleString()}</div>
-                <span className="text-[10px] text-emerald-400">Ready for instant plans</span>
-              </div>
-              <div className="p-3.5 rounded-2xl bg-[#090711]/60 border border-[#8B5CF6]/20">
-                <span className="text-[10px] text-slate-400 uppercase font-mono">Locked Active</span>
-                <div className="text-lg font-bold text-white mt-1">${(user.totalInvested || 0).toLocaleString()}</div>
-                <span className="text-[10px] text-[#B66DFF]">Generating daily yield</span>
-              </div>
+            <div className="text-2xl font-extrabold text-white tabular-nums">
+              {formatNaira(mainBalance)}
             </div>
+            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+              Available liquid balance for initiating new Nigerian savings plans or withdrawing to your bank.
+            </p>
           </div>
+          <button
+            onClick={() => onNavigateTab('deposit')}
+            className="mt-5 w-full py-2.5 rounded-xl bg-[#8B5CF6]/20 hover:bg-[#8B5CF6]/30 border border-[#8B5CF6]/40 text-[#C4B5FD] hover:text-white text-xs font-semibold transition-colors"
+          >
+            Fund Main Balance
+          </button>
         </div>
 
-        {/* Ledger Inflows & Outflows */}
-        <div className="glass-card rounded-3xl p-6">
-          <h3 className="text-base font-bold text-white tracking-wide mb-2">Capital Ledger Summary</h3>
-          <p className="text-xs text-slate-400 mb-5">Aggregated inflow and yield metrics</p>
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 rounded-2xl bg-[#090711]/60 border border-slate-800 text-xs">
-              <span className="text-slate-400">Total Simulated Deposits</span>
-              <span className="font-bold text-white font-mono">
-                +${(user.totalDeposited || 0).toLocaleString()}
-              </span>
+        {/* Task Earnings Wallet */}
+        <div className="rounded-3xl p-6 bg-[#171225] border border-emerald-500/30 shadow-lg flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">Task Balance</span>
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <Award className="w-4 h-4" />
+              </div>
             </div>
-
-            <div className="flex items-center justify-between p-3 rounded-2xl bg-[#090711]/60 border border-slate-800 text-xs">
-              <span className="text-slate-400">Total Harvested ROI Profits</span>
-              <span className="font-bold text-emerald-400 font-mono">
-                +${(user.totalEarned || 0).toLocaleString()}
-              </span>
+            <div className="text-2xl font-extrabold text-emerald-400 tabular-nums">
+              {formatNaira(taskBalance)}
             </div>
-
-            <div className="flex items-center justify-between p-3 rounded-2xl bg-[#090711]/60 border border-slate-800 text-xs">
-              <span className="text-slate-400">Total Simulated Withdrawals</span>
-              <span className="font-bold text-amber-400 font-mono">
-                -${(user.totalWithdrawn || 0).toLocaleString()}
-              </span>
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                onClick={() => onNavigateTab('transactions')}
-                className="text-xs text-[#B66DFF] hover:underline font-semibold"
-              >
-                Inspect Ledger Records →
-              </button>
-            </div>
+            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+              Accumulated rewards from daily literacy lessons, platform attendance check-ins, and surveys.
+            </p>
           </div>
+          <button
+            onClick={() => onNavigateTab('tasks')}
+            className="mt-5 w-full py-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 hover:text-white text-xs font-semibold transition-colors"
+          >
+            Earn & Transfer Tasks
+          </button>
+        </div>
+
+        {/* Affiliate Commission Wallet */}
+        <div className="rounded-3xl p-6 bg-[#171225] border border-amber-500/30 shadow-lg flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">Affiliate Balance</span>
+              <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-400">
+                <Users className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="text-2xl font-extrabold text-amber-300 tabular-nums">
+              {formatNaira(affiliateBalance)}
+            </div>
+            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+              Earned from 7.0% Tier 1 and 3.0% Tier 2 member invitations and community network growth.
+            </p>
+          </div>
+          <button
+            onClick={() => onNavigateTab('referrals')}
+            className="mt-5 w-full py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 hover:text-white text-xs font-semibold transition-colors"
+          >
+            Invite Friends & Earn
+          </button>
+        </div>
+      </div>
+
+      {/* Security & Regulatory Strip */}
+      <div className="p-5 rounded-3xl bg-[#171225] border border-[#8B5CF6]/20 flex items-center justify-between gap-4 flex-wrap text-xs text-slate-300">
+        <div className="flex items-center gap-2.5">
+          <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
+          <span>Encrypted Nigerian financial ledger backed by central database integrity.</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[#C4B5FD]">Currency Code: NGN</span>
+          <span className="text-slate-600">•</span>
+          <span className="font-mono text-emerald-400">Symbol: ₦</span>
         </div>
       </div>
     </div>

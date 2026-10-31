@@ -47,6 +47,7 @@ import {
   UserProfile,
   WithdrawalRequest
 } from '../../types';
+import { formatNaira } from '../../utils/currency';
 import {
   adminAdjustUserBalance,
   adminApproveDeposit,
@@ -101,9 +102,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // User Balance Adjust Modal
   const [adjustTargetUser, setAdjustTargetUser] = useState<UserProfile | null>(null);
-  const [adjustAmount, setAdjustAmount] = useState<number>(500);
+  const [adjustAmount, setAdjustAmount] = useState<number>(50000);
   const [isCredit, setIsCredit] = useState<boolean>(true);
-  const [adjustReason, setAdjustReason] = useState<string>('Institutional Liquidity Grant');
+  const [adjustReason, setAdjustReason] = useState<string>('Nigerian Capital Credit / Liquidity Grant');
   const [isAdjusting, setIsAdjusting] = useState<boolean>(false);
 
   // Plan Edit/Create Modal
@@ -183,7 +184,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       setIsAdjusting(true);
       await adminAdjustUserBalance(adjustTargetUser.uid, adjustAmount, isCredit, adjustReason);
-      showNotification(`Successfully ${isCredit ? 'credited' : 'debited'} $${adjustAmount} to ${adjustTargetUser.displayName}`);
+      showNotification(`Successfully ${isCredit ? 'credited' : 'debited'} ${formatNaira(adjustAmount)} to ${adjustTargetUser.displayName}`);
       setAdjustTargetUser(null);
       onRefresh();
     } catch (err: any) {
@@ -510,10 +511,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </span>
                         </td>
                         <td className="py-3 px-4 font-mono font-bold text-emerald-400">
-                          ${(usr.balance || 0).toLocaleString()}
+                          {formatNaira(usr.balance || 0)}
                         </td>
                         <td className="py-3 px-4 font-mono text-slate-300">
-                          ${(usr.totalInvested || 0).toLocaleString()}
+                          {formatNaira(usr.totalInvested || 0)}
                         </td>
                         <td className="py-3 px-4">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
@@ -577,8 +578,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <tr>
                       <th className="py-2.5 px-3">User</th>
                       <th className="py-2.5 px-3">Amount</th>
-                      <th className="py-2.5 px-3">Asset/Network</th>
-                      <th className="py-2.5 px-3">Simulated Hash</th>
+                      <th className="py-2.5 px-3">Method / Settlement</th>
+                      <th className="py-2.5 px-3">Reference / Session</th>
                       <th className="py-2.5 px-3">Status</th>
                       <th className="py-2.5 px-3 text-right">Action</th>
                     </tr>
@@ -591,7 +592,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <div className="text-[10px] text-slate-400 font-mono">{req.userEmail}</div>
                         </td>
                         <td className="py-3 px-3 font-mono font-bold text-emerald-400">
-                          +${req.amount.toLocaleString()} {req.currency}
+                          +{formatNaira(req.amount)}
                         </td>
                         <td className="py-3 px-3 text-slate-300 font-mono text-[11px]">{req.network}</td>
                         <td className="py-3 px-3 font-mono text-slate-400 text-[10px] truncate max-w-[120px]">{req.txHash}</td>
@@ -649,7 +650,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <tr>
                       <th className="py-2.5 px-3">User</th>
                       <th className="py-2.5 px-3">Amount</th>
-                      <th className="py-2.5 px-3">Destination Wallet</th>
+                      <th className="py-2.5 px-3">Destination Account / Bank</th>
                       <th className="py-2.5 px-3">Status</th>
                       <th className="py-2.5 px-3 text-right">Action</th>
                     </tr>
@@ -662,9 +663,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <div className="text-[10px] text-slate-400 font-mono">{req.userEmail}</div>
                         </td>
                         <td className="py-3 px-3 font-mono font-bold text-amber-400">
-                          -${req.amount.toLocaleString()} {req.currency}
+                          -{formatNaira(req.amount)}
                         </td>
-                        <td className="py-3 px-3 font-mono text-slate-300 text-[11px] truncate max-w-[150px]" title={req.walletAddress}>
+                        <td className="py-3 px-3 font-mono text-slate-300 text-[11px] truncate max-w-[180px]" title={req.walletAddress}>
                           {req.walletAddress}
                         </td>
                         <td className="py-3 px-3">
@@ -717,18 +718,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 setIsNewPlan(true);
                 setEditingPlan({
                   id: `plan_${Date.now()}`,
-                  name: 'New Custom Yield Protocol',
-                  description: 'Quantitative algorithm strategy for digital capital.',
-                  category: 'Algorithmic Yield',
-                  minDeposit: 250,
-                  maxDeposit: 10000,
-                  dailyRoi: 2.0,
-                  totalRoi: 60,
+                  name: 'New Sovereign Treasury Strategy',
+                  description: 'High-yield diversification in Nigerian sovereign treasury assets and high-grade corporate debt.',
+                  category: 'Treasury & Fixed Income',
+                  minDeposit: 50000,
+                  maxDeposit: 5000000,
+                  dailyRoi: 1.5,
+                  totalRoi: 45,
                   durationDays: 30,
-                  riskLevel: 'Balanced',
+                  riskLevel: 'Conservative',
                   capitalReturn: true,
                   active: true,
-                  features: ['Daily auto-distribution', 'Principal return', '24/7 telemetry']
+                  features: ['Daily auto-distribution', 'Principal capital return', 'Central Bank backing']
                 });
               }}
               className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#7C3AED] text-white text-xs font-semibold shadow-md flex items-center gap-1.5 self-start sm:self-auto"
@@ -757,7 +758,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div className="mt-4 grid grid-cols-2 gap-2 text-xs bg-[#090711]/60 p-3 rounded-2xl border border-slate-800">
                     <div>
                       <span className="text-[10px] text-slate-500 font-mono">Min / Max</span>
-                      <div className="font-semibold text-white font-mono">${p.minDeposit} - ${p.maxDeposit}</div>
+                      <div className="font-semibold text-white font-mono">{formatNaira(p.minDeposit)} - {formatNaira(p.maxDeposit)}</div>
                     </div>
                     <div>
                       <span className="text-[10px] text-slate-500 font-mono">Term</span>
@@ -832,7 +833,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </td>
                       <td className="py-3 px-3 capitalize font-sans text-slate-200">{t.type.replace('_', ' ')}</td>
                       <td className="py-3 px-3 font-bold text-white">
-                        ${t.amount.toLocaleString()} {t.currency || 'USD'}
+                        {formatNaira(t.amount)}
                       </td>
                       <td className="py-3 px-3 text-slate-400 text-[11px]">{t.reference}</td>
                       <td className="py-3 px-3">
@@ -954,7 +955,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
             <div className="p-4 rounded-2xl bg-[#090711] border border-slate-800">
               <span className="text-[10px] text-slate-400 uppercase font-mono">Total Commissions Paid</span>
-              <div className="text-2xl font-bold text-emerald-400 mt-1">$4,820.00</div>
+              <div className="text-2xl font-bold text-emerald-400 mt-1">{formatNaira(4820000)}</div>
             </div>
             <div className="p-4 rounded-2xl bg-[#090711] border border-slate-800">
               <span className="text-[10px] text-slate-400 uppercase font-mono">Commission Scheme</span>
@@ -968,7 +969,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {currentTab === 'admin_config' && (
         <div className="glass-card rounded-3xl p-6 max-w-2xl">
           <h3 className="text-base font-bold text-white tracking-wide mb-1">Platform Parameters & Config</h3>
-          <p className="text-xs text-slate-400 mb-5">Operational thresholds and simulated crypto receiving addresses</p>
+          <p className="text-xs text-slate-400 mb-5">Operational thresholds and settlement configuration</p>
 
           <form onSubmit={handleSaveConfig} className="space-y-4 text-xs">
             <div>
@@ -983,7 +984,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-slate-300 font-medium block mb-1">Min Deposit ($)</label>
+                <label className="text-slate-300 font-medium block mb-1">Min Deposit (₦)</label>
                 <input
                   type="number"
                   value={minDeposit}
@@ -992,7 +993,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 />
               </div>
               <div>
-                <label className="text-slate-300 font-medium block mb-1">Min Withdrawal ($)</label>
+                <label className="text-slate-300 font-medium block mb-1">Min Withdrawal (₦)</label>
                 <input
                   type="number"
                   value={minWithdrawal}
@@ -1026,7 +1027,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             <div>
-              <label className="text-slate-300 font-medium block mb-1">Simulated USDT TRC-20 Address</label>
+              <label className="text-slate-300 font-medium block mb-1">Simulated Settlement Account / USSD Endpoint</label>
               <input
                 type="text"
                 value={usdtAddress}
@@ -1108,7 +1109,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="p-3.5 rounded-2xl bg-[#090711]/70 border border-slate-800/80">
                 <span className="text-[10px] text-slate-400 uppercase font-mono tracking-wider">Bonus Distributed</span>
                 <div className="text-xl font-bold text-emerald-400 mt-1 font-mono">
-                  ${promoCodes.reduce((sum, c) => sum + ((c.simulatedBonusAmount || 0) * (c.currentUses || 0)), 0).toLocaleString()}
+                  {formatNaira(promoCodes.reduce((sum, c) => sum + ((c.simulatedBonusAmount || 0) * (c.currentUses || 0)), 0))}
                 </div>
               </div>
             </div>
@@ -1206,7 +1207,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             )}
                           </td>
                           <td className="py-3.5 font-mono font-bold text-white">
-                            {item.simulatedBonusAmount ? `+$${item.simulatedBonusAmount.toFixed(2)}` : 'Tier Access'}
+                            {item.simulatedBonusAmount ? `+${formatNaira(item.simulatedBonusAmount)}` : 'Tier Access'}
                           </td>
                           <td className="py-3.5">
                             <div className="w-32">
@@ -1286,9 +1287,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <thead>
                   <tr className="border-b border-slate-800 text-slate-400 text-[11px] uppercase tracking-wider">
                     <th className="pb-3 font-semibold pl-2">Redeemed At</th>
-                    <th className="pb-3 font-semibold">User ID / Phone</th>
+                    <th className="pb-3 font-semibold">User / Phone</th>
                     <th className="pb-3 font-semibold">Voucher Code</th>
-                    <th className="pb-3 font-semibold text-right pr-2">Bonus Granted</th>
+                    <th className="pb-3 font-semibold text-right pr-2">Perk Granted</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
@@ -1298,7 +1299,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         {new Date(usage.usedAt).toLocaleString()}
                       </td>
                       <td className="py-3 font-mono text-slate-200">
-                        {usage.userId.length > 15 ? `${usage.userId.slice(0, 10)}...${usage.userId.slice(-4)}` : usage.userId}
+                        <span className="font-semibold text-white">{usage.userName || 'User'}</span>
+                        <span className="text-slate-400 ml-1.5 text-[11px]">({usage.userPhone || usage.userId.slice(0, 8)})</span>
                       </td>
                       <td className="py-3">
                         <span className="px-2 py-0.5 rounded-md bg-[#8B5CF6]/20 text-[#C4B5FD] font-mono font-bold text-[11px] border border-[#8B5CF6]/40">
@@ -1306,7 +1308,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </span>
                       </td>
                       <td className="py-3 pr-2 text-right font-mono font-bold text-emerald-400">
-                        +${usage.rewardGiven.toFixed(2)}
+                        {usage.perkGranted}
                       </td>
                     </tr>
                   ))}
@@ -1336,7 +1338,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="p-3 rounded-xl bg-[#090711] border border-slate-800 text-xs mb-4">
               <div className="font-semibold text-white">{adjustTargetUser.displayName}</div>
               <div className="text-slate-400">{adjustTargetUser.email}</div>
-              <div className="mt-1 font-mono text-[#B66DFF]">Current Balance: ${(adjustTargetUser.balance || 0).toLocaleString()}</div>
+              <div className="mt-1 font-mono text-[#B66DFF]">Current Balance: {formatNaira(adjustTargetUser.balance || 0)}</div>
             </div>
 
             <form onSubmit={handleConfirmAdjust} className="space-y-4 text-xs">
@@ -1365,7 +1367,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               <div>
-                <label className="text-slate-300 font-medium block mb-1">Adjustment Amount ($)</label>
+                <label className="text-slate-300 font-medium block mb-1">Adjustment Amount (₦)</label>
                 <input
                   type="number"
                   min="1"
@@ -1450,7 +1452,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="text-slate-300 font-medium block mb-1">Min Deposit ($)</label>
+                  <label className="text-slate-300 font-medium block mb-1">Min Deposit (₦)</label>
                   <input
                     type="number"
                     value={editingPlan.minDeposit}
@@ -1682,27 +1684,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div>
                   <label className="text-slate-300 font-medium block mb-1">Perk Type</label>
                   <select
-                    value={promoType}
-                    onChange={(e) => setPromoType(e.target.value as any)}
+                    value={promoPerkType}
+                    onChange={(e) => setPromoPerkType(e.target.value as any)}
                     className="w-full bg-[#090711] border border-[#8B5CF6]/30 rounded-xl p-2.5 text-white"
                   >
-                    <option value="bonus_balance">Sign-up Balance ($)</option>
-                    <option value="yield_boost">Yield Boost (% ROI)</option>
-                    <option value="fee_discount">Fee Discount (% OFF)</option>
+                    <option value="simulated_bonus">Simulated Bonus Balance (₦)</option>
+                    <option value="educational_vip">VIP Educational Scholar Tier</option>
+                    <option value="referral_boost">Referral Boost (+2% bonus)</option>
+                    <option value="course_unlock">Quantitative Academy Unlock</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="text-slate-300 font-medium block mb-1">
-                    {promoType === 'bonus_balance' ? 'Bonus Amount ($)' : 'Reward Rate (%)'}
+                    {promoPerkType === 'simulated_bonus' ? 'Bonus Amount (₦)' : 'Simulated Credit (₦)'}
                   </label>
                   <input
                     type="number"
-                    step="0.5"
-                    min="1"
+                    step="5"
+                    min="0"
                     required
-                    value={promoRewardValue}
-                    onChange={(e) => setPromoRewardValue(Number(e.target.value))}
+                    value={promoBonusAmount}
+                    onChange={(e) => setPromoBonusAmount(Number(e.target.value))}
                     className="w-full bg-[#090711] border border-[#8B5CF6]/30 rounded-xl p-2.5 text-white font-mono"
                   />
                 </div>
@@ -1734,12 +1737,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               <div>
-                <label className="text-slate-300 font-medium block mb-1">Campaign Description</label>
+                <label className="text-slate-300 font-medium block mb-1">Perk Description</label>
                 <textarea
                   rows={2}
-                  value={promoDescription}
-                  onChange={(e) => setPromoDescription(e.target.value)}
-                  placeholder="e.g. Special institutional pilot allocation voucher"
+                  value={promoPerkDescription}
+                  onChange={(e) => setPromoPerkDescription(e.target.value)}
+                  placeholder="e.g. VIP Institutional Sign-up Credit"
                   className="w-full bg-[#090711] border border-[#8B5CF6]/30 rounded-xl p-2.5 text-white resize-none"
                 />
               </div>
